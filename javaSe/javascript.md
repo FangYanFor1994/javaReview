@@ -76,3 +76,100 @@ var a = [1,2,3,4];
     }
 ```
 
+#### 4.监听事件与冒泡、捕获
+
+```javascript
+1.addEventListener()方法：
+	概述：DOM中不允许向一个元素添加多个相同的事件，而addEventListener()可以向一个元素添加多个相同类型或不同类型的事件句柄；比如两个click事件；
+    例：element.addEventListener(event, function, useCapture)；
+    注：第三个参数为Boolean值，true代表捕获，false代表冒泡；默认为false（冒泡、捕获针对被覆盖的元素而言。冒泡是从上往下执行，捕获相反）
+```
+
+![](assets/1555430150253.png)
+
+```javascript
+2.cancelBubble阻止事件的冒泡和捕获
+	var b = document.getElementById("myDiv").addEventListener("click",myfirstfn);
+		b.cancelBubble=true;
+		var c = document.getElementById("div2").addEventListener("click",bigfn，true);
+
+则c事件被阻止；
+```
+
+#### 5.元素操作（创建和删除元素）
+
+```javascript
+1.创建新元素
+element.appendChild(newElement);
+例：
+	<div id="div1">
+        <p id="p1">这是一个段落。</p>
+        <p id="p2">这是另一个段落。</p>
+    </div>
+    <script>
+        var para=document.createElement("p");
+        var node=document.createTextNode("这是一个新段落。");
+        para.appendChild(node);
+        var element=document.getElementById("div1");
+        element.appendChild(para);
+    </script>
+
+2.删除已有元素
+parentElement.removeChild(childElement);
+	例：
+    <div id="div1">
+        <p id="p1">这是一个段落。</p>
+        <p id="p2">这是另一个段落。</p>
+    </div>
+    <script>
+        var parent=document.getElementById("div1");
+        var child=document.getElementById("p1");
+        parent.removeChild(child);
+    </script>
+	//注意：js删除元素必须利用该元素的父节点元素来删除；
+```
+
+#### 6.BOM（浏览器对象模型）
+
+```javascript
+概述：用于操作浏览器对象；
+	其中DOM中的document也属于浏览器，window.document.getElementById("myId");中window省略；
+    window.location.href="url";跳转新链接；
+```
+
+#### 7.JavaScript计时器
+
+```javascript
+1.JavaScript计时器事件setInterval()：（每隔指定时间执行一次指定代码）
+	指定时间执行指定代码;
+
+	<button onclick="stopFunction()">停止</button>
+
+	var myVar=setInterval(function(){myTimer()},1000);
+    function myTimer(){
+    var d=new Date();
+    var t=d.toLocaleTimeString();
+    document.getElementById("demo").innerHTML=t;
+    }
+function stopFunction(){
+    clearInterval(myVar);
+}
+	
+2.clearInterval()停止计时器
+	见上示例；
+    
+3.setTimeOut(function,time):(从当前时间起多少毫秒后执行第一个参数)
+	clearTimeout();
+示例:
+	var myVar;
+    function myFunction()
+    {
+    myVar=setTimeout(function(){alert("Hello")},3000);
+    }
+    function myStopFunction()
+    {
+    clearTimeout(myVar);
+    }
+//用法同计时器
+```
+
