@@ -99,3 +99,14 @@ writer.write(document);
 return file.getAbsolutePath();
 ```
 
+### 4.xml的约束
+
+```xml
+1.概述：对于xml来说，xml中的标签只要满足书写规则，任何的标签都可以使用，但是有些xml，我们只希望它出现我们想要的标签，因此可以通过xml约束来实现；
+2.约束：约束这个xml文件只能出现哪些标签；
+3.名称空间：xmlns:s="http://www.qf.com" (标签库)
+    schemaLocation：约束存放的位置
+    xsi:schemaLocation="http://java.sun.com/xml/ns/javaee http://java.sun.com/xml/ns/javaee/web-app_2_5.xsd" 
+说明：该xml文件约束的具体规则是写在这个地址内的
+```
+
