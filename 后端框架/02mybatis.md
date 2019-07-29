@@ -139,7 +139,7 @@ public static void main(String[] args) throws IOException {
 
 ### 3.Mybatis相关类的生命周期
 
-### 3.1SqlSessionFactoryBuilder
+####3.1SqlSessionFactoryBuilder
 
 ```
 这个类可以被实例化、使用和丢弃，一旦创建了 SqlSessionFactory，就不再需要它了。因此
@@ -448,7 +448,7 @@ public class CRUDTest {
 
 ### 6.面向接口方式编程
 
-*原理**
+**原理**
 
 ```
 MyBatis将核心配置文件中的每一个节点抽象为一个 Mapper 接口，而这个接口中声明的方法和跟节点中的
