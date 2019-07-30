@@ -1280,3 +1280,134 @@ public class TestJDBC2 {
 }
 ```
 
+### 7.AOP编程
+
+#### 7.1AOP概念
+
+```
+1.AOP（Aspect Oriented Programming）,即面向切面编程，其目的就是把核心业务和通用功能（切面业务）进行拆分，降低耦合性，提高扩展性。
+2.AOP技术是对OOP技术的扩展和补充，OOP技术强调的是抽象，封装，建成统一结构。AOP技术主要是把代码分离。
+```
+
+#### 7.2AOP技术原理
+
+```
+1.连接点（join point）
+	横切业务在核心业务代码中执行的位置。
+	spring仅支持方法连接点，即仅能在方法调用前，方法调用后，方法抛出异常是，以及方法调用前后这些程序执行点织入增强；
+2.切点（Pointcut）
+	独立的连接点，当前该连接点正在被使用并织入切面业务，该连接点被称为切点；
+3.增强（advice）
+	切面业务逻辑，强调的是切入时机。
+	BeforeAdvice前置增强，AfterReturningAdvice主业务方法执行完后织入切面逻辑，ThrowsAdvice抛出异常后织入切面逻辑。
+4.目标对象（target）
+	核心业务逻辑，即主程序代码；
+5.引介（introduction）
+	引介是一种特殊的额增强，它为类添加一些属性和方法，这样，即使一个业务类原本没有实现某个接口，通过AOP的引介功能，也可以动态的为该业务类添加接口的实现逻辑，让业务类称为这个接口的实现类。
+6.织入（weaving）
+	把横切业务切到核心业务上，这个过程叫织入；
+	spring主要通过动态代理织入，在运行期为目标类中添加增强生成子类的方式；
+	spring采用动态代理织入（JDK动态代理|CGLIB动态代理），而AspectJ采用编译期织入和类装载器织入。
+7.代理（proxy）
+	一个类被AOP织入增强后，就产生了一个结果类，它是融合了原类功能和增强逻辑功能的代理类，根据不同的代理方式，代理类既可能是和原类具有相同接口的类（JDK动态代理），也可能就是原类的子类（CGLIB动态代理），所以可以采用与原类相同的方法调用代理类。
+8.切面（aspect）
+	整合了增强（advice）和切面业务的代码，即横切业务。
+```
+
+#### 7.3SpringAOP底层技术实现之JDK动态代理
+
+##### 1.JDK动态代理实现步骤
+
+```java
+1.目标类和代理类具有相同的接口
+2.使用JDK提供的proxy类来生成动态代理对象，
+3.实现接口InvocationHandler接口  
+ 	回调目标类方法并且加入横切方法
+4.依赖spring-aop.jar
+```
+
+##### 2.代码
+
+```java
+//接口
+public interface IMainBiz{
+    public void run();
+}
+```
+
+```java 
+//目标类|核心业务类|被代理类
+public class MainBiz implements IMainBiz{
+    @Override
+	public void run() {
+		System.out.println("核心业务方法");
+	}
+}
+```
+
+```java
+//InvocationHandler接口实现类对象（实现invoke方法回调主业务方法，并进行增强）
+public class ProxyService implements InvocationHandler{
+	Object target;
+	//核心业务类对象
+	public ProxyService(Object target) {
+		this.target=target;
+	}
+	
+	@Override
+	public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+		//回调核心业务类方法
+		Object invoke = method.invoke(target, args);
+		//后置增强
+		System.out.println("输出日志...........");
+		return invoke;
+	}
+	
+	
+	//生成代理类对象
+	public Object getProxyService() {
+		return Proxy.newProxyInstance(target.getClass().getClassLoader(),target.getClass().getInterfaces(),this);
+	}
+	
+}
+
+```
+
+```java
+//测试类
+public void test() {
+ 		//创建被代理类对象
+		MainBiz biz = new MainBiz();
+    	//代理类对象传入InvocationHandler接口的实现类，供方法回调和增强
+		ProxyService service = new ProxyService(biz);
+    	//生成的代理类因为和被代理类实现相同的接口，因此可以用接口类型接收代理对象
+		IMainBiz mainBiz = (IMainBiz) service.getProxyService();
+    	//调用代理类的run()方法，会进行增强
+		mainBiz.run();
+	}
+```
+
+```java
+个人理解：
+主要两方面：1）利用Proxy生成代理类对象；2）InvocationHandler实现类对方法进行增强
+	1.
+	Proxy.newProxyInstance(ClassLoader,Interfaces,h);生成代理对象；
+	--classLoader参数：被代理类的类加载器
+	--Interfaces参数：被代理类实现的所有接口
+	--h参数：InvocationHandler接口的实现类
+	
+	2.
+    new InvocationHandler(){
+    	@Override
+	public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+		//回调核心业务类方法
+		Object invoke = method.invoke(target, args);
+		//后置增强
+		System.out.println("输出日志...........");
+		return invoke;
+	}
+    }
+    
+注意：JDK动态代理要求被代理类必须实现接口，且增实现接口内的方法，因为代理类也实现该接口，仅能调用该接口方法
+```
+
