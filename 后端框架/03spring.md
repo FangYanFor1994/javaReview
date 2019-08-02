@@ -1280,7 +1280,7 @@ public class TestJDBC2 {
 }
 ```
 
-### 7.AOP编程
+### 7.AOP编程原理
 
 #### 7.1AOP概念
 
@@ -1410,4 +1410,433 @@ public void test() {
     
 注意：JDK动态代理要求被代理类必须实现接口，且增实现接口内的方法，因为代理类也实现该接口，仅能调用该接口方法
 ```
+
+#### 7.4SpringAOP底层技术实现之CGLIB动态代理
+
+##### 1.执行原理
+
+```java
+如果一个类没有实现接口，又想为这个类创建代理对象，JDK动态代理的方式就不可行。这时，一般使用继承目标类的方式，来扩展功能。CGLIB就是通过主动继承目标类生成子类的方式来扩展相应切面功能的。
+当我们主动执行目标类相应的方法时，则CGLIB会拦截所有对目标类方法的执行，转向到执行子类中（代理对象）的方法，则切面业务方法得以执行，然后子类（代理对象）会去执行父类中相应的方法。
+```
+
+##### 2.实现步骤
+
+```
+1.创建目标类；
+2.创建拦截器类，该类实现MethodInterceptor
+3.使用字节码增强技术，即在内存中动态生成子类字节码文件，让子类（代理类）继承父类（被代理类）。
+4.获取代理对象，调用相应方法即可
+```
+
+##### 3.代码
+
+```xml
+<!--AOP实现-->
+	<dependency>
+		<groupId>aopalliance</groupId>
+		<artifactId>aopalliance</artifactId>
+		<version>1.0</version>
+	</dependency>
+	<!--切面实现-->
+	<dependency>
+		<groupId>org.aspectj</groupId>
+		<artifactId>aspectjweaver</artifactId>
+		<version>1.8.10</version>
+	</dependency>
+	<!--spring对切面的支持-->
+	<dependency>
+		<groupId>org.springframework</groupId>
+		<artifactId>spring-aspects</artifactId>
+		<version>4.2.8.RELEASE</version>
+	</dependency>
+	<!--spring对aop的支持-->
+	<dependency>
+		<groupId>org.springframework</groupId>
+		<artifactId>spring-aop</artifactId>
+		<version>4.2.8.RELEASE</version>
+	</dependency>
+```
+
+```java
+//目标类
+public class MainBiz{
+    public void run(){
+        System.out.println("核心业务方法");
+    }
+}
+```
+
+```java 
+//拦截类
+public class ProxyService implements MethodInterceptor{
+    //字节码增强对象
+    private Enhancer enhancer = new Enhancer();
+    
+    /**
+     *回调父类中的方法
+     *执行切面业务
+     *proxy子类对象
+     *method方法（不要主动使用method方法，会产生死循环）
+     *params方法参数
+     *methodProxy复合对象，其中包含父类对象
+    */
+	@Override
+    public Object intercept(Object proxy,Method method,Object[] params,MethodProxy methodProxy) throws Throwable{
+        //回调父类中的方法
+        Object ret = methodProxy.invokeSuper(proxy,params);
+        //切入切面业务
+        System.out.println("写日志");
+        return ret;
+    }
+    
+    /**
+    *获取代理对象
+    */
+    public Object getProxy(Class target){
+        //获取父类结构，生成子类结构
+        enhancer.setSuperclass(target);
+        //回调MethodInterceptor中的intercept方法
+        enhancer.setCallback(this);
+        //创建代理对象（子类对象）
+        return enhancer.create();
+    }
+    
+}
+```
+
+```java 
+//测试
+public static void main(String[] args){
+    ProxyService ser = new ProxyService();
+    //代理对象继承了目标类，所以可以用目标类接收
+    MainBiz mainBiz = ser.getProxy(MainBiz.class);
+    mianBiz.run();
+}
+```
+
+### 8.SpringAOP实际应用
+
+#### 8.1基于xml的AOP编程
+
+##### 1.实现步骤
+
+```xml
+1.在applicationContext.xml头上设置命名空间
+	 xmlns:aop="http://www.springframework.org/schema/aop"
+   http://www.springframework.org/schema/aop
+   http://www.springframework.org/schema/aop/spring-aop.xsd" 
+2.在applicationContext.xml文件中配置目标类对象和切面类对象
+3.使用<aop:config></aop:config>标签配置目标类对象和切面类对象之间的关系
+```
+
+##### 2.增强策略
+
+```java
+1.aop:before  前置增强
+2.aop:after   后置增强（不管是否抛出异常都会执行切面业务）
+3.after-returning  后置增强，可以在切面类中获取返回值作进一步处理。（抛出异常将不执行切面业务）
+4.after-throwing  后置增强，可以在切面类中获取主业务方法抛出的异常做进一步处理。（不抛出异常切面业务将不会执行）
+5.after-round  环绕增强，可以在主业务方法的前后均织入切面业务
+```
+
+##### 3.代码
+
+```java
+//目标类
+public class MainBiz{
+    public void doMainBiz(){
+        System.out.println("主业务");
+    }
+}
+```
+
+```java 
+//切面类
+public class LogBiz{
+    //1.前置增强
+    public void doLogBiz() throws Throwable{
+        System.out.println("写日志");
+    }
+    //后置增强
+    public void doLogBiz2() throws Throwable{
+        System.out.println("写日志");
+    }
+    //3.环绕增强
+    public void diLogBiz3(ProceedingJoinPoint jp) throws Throwable{
+        System.out.println("写日志");
+        //调用主业务方法
+        Object ret = jp.proceed();
+        System.out.println("写日志2");
+    }
+    //4.后置增强（after-returning方式）
+    //注意：方法参数rt的名称必须和标签中的 returning="rt"属性一致
+	public void doLogBiz4(Object rt) throws Throwable{
+		System.out.println("写日志");
+		//可以获取主业务方法的返回值，做进一步业务处理
+		System.out.println(rt);
+	}
+	 //5.后置增强（after-throwing方式）
+     //注意：方法参数ex的名称必须和标签中的 throwing="ex"属性一致
+	public void doLogBiz5(Exception ex) throws Throwable{
+		System.out.println("写日志");
+        //可以对主业务方法抛出异常后，做进一点处理
+		if(ex instanceof ArithmeticException){
+			System.out.println("算术异常");
+		}else{
+			System.out.println("未知异常");
+		}
+	}
+}
+```
+
+```xml
+<!--applicationContext.xml-->
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+xmlns:p="http://www.springframework.org/schema/p"
+xmlns:context="http://www.springframework.org/schema/context"
+xmlns:aop="http://www.springframework.org/schema/aop"
+xsi:schemaLocation="http://www.springframework.org/schema/beans
+http://www.springframework.org/schema/beans/spring-beans.xsd
+http://www.springframework.org/schema/context
+http://www.springframework.org/schema/context/spring-context.xsd
+http://www.springframework.org/schema/aop
+http://www.springframework.org/schema/aop/spring-aop.xsd" >
+
+	<!-- 核心业务类对像 -->
+	<bean id="mainbiz" class="springxml.MainBiz"></bean>
+	
+	<!-- 切面类对像 -->
+	<bean id="logbiz" class="springxml.LogBiz"></bean>
+	
+	<!-- Spring的AOP编程 -->
+	<aop:config>
+		<!-- 切入点 
+		expression：用来匹配目标类对像中方法
+		-->
+		<aop:pointcut expression="execution(public * springxml.MainBiz.doMainBiz(..))" id="pointcut"/>
+		<!-- 切面,
+		ref：引入切面类对像
+		method：切面方法
+		pointcut-ref：关联切入点
+		 -->
+		<aop:aspect ref="logbiz">
+            <!--前置增强-->
+		 	<aop:before method="doLogBiz" pointcut-ref="pointcut"/>
+			 <!--后置增强-->
+			<aop:after method="doLogBiz2" pointcut-ref="pointcut"/> 
+             <!--环绕增强，需要在切面方法中使用ProceedingJoinPoint对像完成对主业务方法的调用-->
+			<aop:around method="doLogBiz3" pointcut-ref="pointcut"/>
+			 <!--后置增强，需主业务方法无异常抛出-->
+			<aop:after-returning method="doLogBiz4" pointcut-ref="pointcut" returning="rt"/>
+			 <!--后置增强，需主业务方法有异常抛出-->
+			<aop:after-throwing method="doLogBiz5" pointcut-ref="pointcut" throwing="ex"/>
+			
+			
+		</aop:aspect>
+	</aop:config>
+</beans>
+```
+
+```java 
+//测试
+public static void main(String[] args) {
+		ApplicationContext ac = new ClassPathXmlApplicationContext("applicationContext.xml");
+		//代理对像
+		MainBiz mainbiz = ac.getBean("mainbiz",MainBiz.class);
+		mainbiz.doMainBiz();
+	}
+```
+
+#### 8.2基于通知类的AOP编程
+
+##### 1.通知接口类型
+
+```java
+1.MethodBeforeAdvice    前置增强处理
+2.AfterReturningAdvice  后置增强（抛出异常将不执行切面业务）
+3.ThrowsAdvice          后置增强（抛出异常才执行切面业务）
+如果是环绕增强，则切面类要同时实现1,2,3接口
+注意：   使用ThrowsAdvice时，需要手动加入切面方法
+		public void afterThrowing(Exception ex){...}
+```
+
+##### 2.实现步骤
+
+```xml
+1.切面类实现通知接口
+2.在applicationContext.xml文件使用<aop:advisor>标签代替<aop:aspect>标签；
+```
+
+##### 3.代码
+
+```java
+//切面类，实现通知接口
+public class LogBiz implements MethodBeforeAdvice,AfterReturningAdvice,ThrowsAdvice{
+    
+	@Override
+	public void before(Method method, Object[] args, Object target) throws Throwable {
+		System.out.println("前置日志1");
+	}
+    
+	@Override
+	public void afterReturning(Object returnValue, Method method, Object[] args, Object target) throws Throwable {
+		System.out.println("后置日志正常2");
+	}
+	
+    //需手动加入该方法
+	public void afterThrowing(Exception ex){
+		System.out.println("后置日志异常2");
+	}
+}
+```
+
+```java
+//目标类
+public class MainBiz {
+	public void doMainBiz(){
+		System.out.println("主业务");
+	}
+}
+```
+
+```xml
+<!--applicationContext.xml文件配置-->
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+xmlns:p="http://www.springframework.org/schema/p"
+xmlns:context="http://www.springframework.org/schema/context"
+xmlns:aop="http://www.springframework.org/schema/aop"
+xsi:schemaLocation="http://www.springframework.org/schema/beans
+http://www.springframework.org/schema/beans/spring-beans.xsd
+http://www.springframework.org/schema/context
+http://www.springframework.org/schema/context/spring-context.xsd
+http://www.springframework.org/schema/aop
+http://www.springframework.org/schema/aop/spring-aop.xsd" >
+
+	<!-- 核心业务类对像 -->
+	<bean id="mainbiz" class="springadvice.MainBiz"></bean>
+	
+	<!-- 切面类对像 -->
+	<bean id="logbiz" class="springadvice.LogBiz"></bean>
+	
+	<!-- Spring的AOP编程 -->
+	<aop:config>
+		<aop:pointcut expression="execution(public * springadvice.MainBiz.doMainBiz(..))" id="pointcut"/>
+		<!-- 实现了通知接口的切面类 -->
+		<aop:advisor advice-ref="logbiz" pointcut-ref="pointcut"/>
+	</aop:config>
+</beans>
+```
+
+```java
+//测试
+public static void main(String[] args) {
+		ApplicationContext ac = new ClassPathXmlApplicationContext("applicationContext.xml");
+		
+		MainBiz mainbiz = ac.getBean("mainbiz", MainBiz.class);
+		
+        //发现主业务方法运行时，会织入增强处理
+		mainbiz.doMainBiz();
+
+	}
+```
+
+#### 8.3基于注解方式的AOP编程
+
+##### 1.常用AOP注解
+
+```
+1.@Aspect   标识一个类为切面类
+2.@PointCut 标识一个方法为切入点方法
+3.@Before   前置增强策略
+4.@After    后置增强策略（不管是否出现异常）
+5.@AfterReturning 后置增强（不出现异常的情况）
+6.@AfterThrowing  后置增强（出现异常情况）
+7.Around    环绕增强
+```
+
+##### 2.实现步骤
+
+```xml
+1.在ApplicationContext.xml文件配置支持AOP注解方式驱动
+<aop:aspectJ-autoproxy></aop:aspectJ-autoproxy>
+2.配合使用IOC注解方式来完成AOP编程；
+```
+
+##### 3.代码
+
+```java
+//目标类
+public class MainBiz{
+    public void doMainBiz(){
+        System.out.println("主业务");
+    }
+}
+```
+
+```java 
+//切面类 @Aspect标识其为切面
+
+@Component
+@Aspect
+public class LogBiz {
+	
+    //定义切入点
+	@Pointcut(value="execution(public * springanno.MainBiz.doMainBiz(..))")
+	public void print(){
+	}
+	
+    //增强策略，引入print()切入点，这里以方法名作为切入点的标识符
+    @Around(value="print()")
+    //也可以省略@Pointcut注解，直接使用以下简写方式
+	//@Around(value="execution(public * springanno.MainBiz.doMainBiz(..))")
+	public void doLogBiz() throws Throwable{
+		
+		System.out.println("写日志");
+	 
+	}
+
+}
+```
+
+```xml
+<!--applicationContext.xml配置-->
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+xmlns:p="http://www.springframework.org/schema/p"
+xmlns:context="http://www.springframework.org/schema/context"
+xmlns:aop="http://www.springframework.org/schema/aop"
+xsi:schemaLocation="http://www.springframework.org/schema/beans
+http://www.springframework.org/schema/beans/spring-beans.xsd
+http://www.springframework.org/schema/context
+http://www.springframework.org/schema/context/spring-context.xsd
+http://www.springframework.org/schema/aop
+http://www.springframework.org/schema/aop/spring-aop.xsd" >
+
+	<!-- IOC注解 -->
+	<context:component-scan base-package="springanno"></context:component-scan>
+
+	<!--支持注解方式AOP编程驱动 -->
+	<aop:aspectj-autoproxy></aop:aspectj-autoproxy>
+</beans>
+```
+
+```java
+//测试
+public static void main(String[] args){
+    ApplicationContext ac = new ClassPathXmlApplicationContext("applicationContext.xml");
+		
+		MainBiz mainbiz = ac.getBean("biz", MainBiz.class);
+		
+		mainbiz.doMainBiz();
+
+}
+```
+
+
 
