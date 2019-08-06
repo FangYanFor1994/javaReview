@@ -1756,7 +1756,7 @@ public static void main(String[] args) {
 4.@After    后置增强策略（不管是否出现异常）
 5.@AfterReturning 后置增强（不出现异常的情况）
 6.@AfterThrowing  后置增强（出现异常情况）
-7.Around    环绕增强
+7.@Around    环绕增强
 ```
 
 ##### 2.实现步骤
@@ -1838,5 +1838,295 @@ public static void main(String[] args){
 }
 ```
 
+### 9.Spring事务管理策略
 
+#### 1.Spring提供事务管理平台
+
+```java
+1.DataSourceTransactionManager：JDBC的事务管理平台
+2.HibernateTransactionManager:hibernate的事务管理平台
+3.JpaTransactionManager:用于分布式事务管理平台
+```
+
+#####1.1Spring提供事务管理策略
+
+**在TransactionDefinition类中定义了事务策略常量值**
+
+```java
+//事务传播机制
+int PROPAGATION_REQUIRED = 0; //支持当前事务，如果不存在，就新建一个
+int PROPAGATION_SUPPORTS = 1; //支持当前事务，如果不存在，就不使用事务
+int PROPAGATION_MANDATORY = 2; //支持当前事务，如果不存在，就抛出异常
+int PROPAGATION_REQUIRES_NEW = 3;//如果有事务存在，挂起当前事务，创建一个新的事物
+int PROPAGATION_NOT_SUPPORTED = 4;//以非事务方式运行，如果有事务存在，挂起当前事务
+int PROPAGATION_NEVER = 5;//以非事务方式运行，如果有事务存在，就抛出异常
+int PROPAGATION_NESTED = 6;//如果有事务存在，则嵌套事务执行
+
+//事务隔离级别
+int ISOLATION_DEFAULT = -1;//默认级别，MYSQL: 默认为REPEATABLE_READ级别 SQLSERVER: 默认为
+READ_COMMITTED
+int ISOLATION_READ_UNCOMMITTED = 1;//读取未提交数据(会出现脏读, 不可重复读) 基本不使用
+int ISOLATION_READ_COMMITTED = 2;//读取已提交数据(会出现不可重复读和幻读)
+int ISOLATION_REPEATABLE_READ = 4;//可重复读(会出现幻读)
+int ISOLATION_SERIALIZABLE = 8;//串行化
+int TIMEOUT_DEFAULT = -1;//默认是-1，不超时，单位是秒
+//事务的传播行为
+int getPropagationBehavior();
+//事务的隔离级别
+int getIsolationLevel();
+//事务超时时间
+int getTimeout();
+//是否只读
+boolean isReadOnly();
+String getName();
+```
+
+#####1.2事务隔离级别
+
+```java 
+1.读未提交
+Read uncommitted  //最低级别，以上情况均无法保证
+2.读已提交
+Read committed  //可避免脏读情况发生
+3.可重读读
+Repeatable read  //可避免脏读，不可重复读的情况发生，不可避免虚读
+4.串行化读
+Serializable  //事务只能一个一个执行，避免了脏读等问题，但是执行效率慢，使用时慎重
+```
+
+#### 2.AOP切面事务配置
+
+##### 2.1xml文件配置方式事务
+
+```java
+//步骤
+1.引入jar包；
+2.创建service类和dao类；
+3.在applicationContext.xml文件配置事务切面；
+//xml切面事务配置相当于基于通知类的aop编程，事务切面实现了通知接口MethodBeforeAdvice,AfterReturningAdvice,ThrowsAdvice
+```
+
+```xml
+<!--jar包-->
+		<dependency>
+			<groupId>org.springframework</groupId>
+			<artifactId>spring-context</artifactId>
+			<version>4.2.8.Release</version>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework</groupId>
+			<artifactId>spring-core</artifactId>
+			<version>4.2.8.RELEASE</version>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework</groupId>
+			<artifactId>spring-beans</artifactId>
+			<version>4.2.8.RELEASE</version>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework</groupId>
+			<artifactId>spring-context-support</artifactId>
+			<version>4.2.8.RELEASE</version>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework</groupId>
+			<artifactId>spring-expression</artifactId>
+			<version>4.2.8.RELEASE</version>
+		</dependency>
+		
+		<dependency>
+			<groupId>commons-logging</groupId>
+			<artifactId>commons-logging</artifactId>
+			<version>1.1.2</version>
+		</dependency>
+		<dependency>
+			<groupId>log4j</groupId>
+			<artifactId>log4j</artifactId>
+			<version>1.2.14</version>
+		</dependency>
+
+		<dependency>
+			<groupId>aopalliance</groupId>
+			<artifactId>aopalliance</artifactId>
+			<version>1.0</version>
+		</dependency>
+		<dependency>
+			<groupId>org.aspectj</groupId>
+			<artifactId>aspectjweaver</artifactId>
+			<version>1.8.10</version>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework</groupId>
+			<artifactId>spring-aspects</artifactId>
+			<version>4.2.8.RELEASE</version>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework</groupId>
+			<artifactId>spring-aop</artifactId>
+			<version>4.2.8.RELEASE</version>
+		</dependency>
+		
+		<dependency>
+			<groupId>junit</groupId>
+			<artifactId>junit</artifactId>
+			<version>4.12</version>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework</groupId>
+			<artifactId>spring-jdbc</artifactId>
+			<version>4.2.8.RELEASE</version>
+		</dependency>
+
+		<!--数据源 -->
+		<dependency>
+			<groupId>com.mchange</groupId>
+			<artifactId>c3p0</artifactId>
+			<version>0.9.5.2</version>
+		</dependency>
+
+		<!--mysql驱动 -->
+		<dependency>
+			<groupId>mysql</groupId>
+			<artifactId>mysql-connector-java</artifactId>
+			<version>5.1.40</version>
+		</dependency>
+		
+		<!-- spring-tx事务管理 -->
+		<dependency>
+			<groupId>org.springframework</groupId>
+			<artifactId>spring-tx</artifactId>
+			<version>4.2.8.RELEASE</version>
+		</dependency>
+		<!--spring-test-->
+		<dependency>
+			<groupId>org.springframework</groupId>
+			<artifactId>spring-test</artifactId>
+			<version>4.2.8.RELEASE</version>
+		</dependency>
+```
+
+```java
+//serivce
+
+@Service
+public class AccountService {
+	@Autowired
+	private AccountDao dao;
+    //spring会自动切入事务
+	//转账操作
+	public void transfer(int fromId,int toId,int money){
+		dao.out(fromId, money);
+		dao.in(toId, money);
+	}
+}
+```
+
+```java
+//dao
+@Repository
+public class AccountDao {
+	
+	@Autowired
+	private JdbcTemplate temp;
+
+	/**
+	 * 转入
+	 * @param toId
+	 * @param money
+	 */
+	public void in(int toId,int money){
+		
+		temp.update("update account set balance=balance+? where id = ?", money,toId);
+	}
+	/**
+	 * 转出
+	 * @param fromId
+	 * @param money
+	 */
+	public void out(int fromId,int money){
+		
+		temp.update("update account set balance=balance-? where id = ?", money,fromId);
+	}
+}
+```
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+xmlns:p="http://www.springframework.org/schema/p"
+xmlns:tx="http://www.springframework.org/schema/tx"
+xmlns:aop="http://www.springframework.org/schema/aop"
+xmlns:context="http://www.springframework.org/schema/context"
+xsi:schemaLocation="http://www.springframework.org/schema/beans
+http://www.springframework.org/schema/beans/spring-beans.xsd
+http://www.springframework.org/schema/context
+http://www.springframework.org/schema/context/spring-context.xsd
+http://www.springframework.org/schema/tx
+http://www.springframework.org/schema/tx/spring-tx.xsd
+http://www.springframework.org/schema/aop
+http://www.springframework.org/schema/aop/spring-aop.xsd" >
+
+	<!-- 组件扫描 -->
+	<context:component-scan base-package="dao,service"></context:component-scan>
+    
+	<!-- 加载外部properties属性文件 -->
+	<context:property-placeholder location="db.properties"/>
+	<!-- C3p0数据源创建 -->
+	<bean id="dataSource" class="com.mchange.v2.c3p0.ComboPooledDataSource">
+		<property name="driverClass" value="${jdbc.driver}"></property>
+ 		<property name="jdbcUrl" value="${jdbc.url}"></property>
+ 		<property name="user" value="${jdbc.username}"></property>
+ 		<property name="password" value="${jdbc.password}"></property>
+	</bean>
+	<!-- JdbcTemplate模板 -->
+	<bean id="temp" class="org.springframework.jdbc.core.JdbcTemplate">
+		<constructor-arg index="0" ref="dataSource"></constructor-arg>
+	</bean>
+	
+	<!-- JDBC事务管理平台 -->
+	<bean id="txManager" class="org.springframework.jdbc.datasource.DataSourceTransactionManager">
+		<property name="dataSource" ref="dataSource"></property>
+	</bean>
+	
+	<!-- 事务切面 -->
+	<tx:advice transaction-manager="txManager" id="txAdvice">
+		<tx:attributes>
+            <!--给哪些方法加事务-->
+			<tx:method name="save*" isolation="REPEATABLE_READ" propagation="REQUIRED"/> 
+			<tx:method name="add*" isolation="REPEATABLE_READ" propagation="REQUIRED"/>
+			<tx:method name="remove*" isolation="REPEATABLE_READ" propagation="REQUIRED"/>
+			<tx:method name="modify*" isolation="REPEATABLE_READ" propagation="REQUIRED"/>
+			<tx:method name="transfer*" isolation="REPEATABLE_READ" propagation="NESTED"/>
+			<tx:method name="test*" isolation="REPEATABLE_READ" propagation="NOT_SUPPORTED"/>
+			<tx:method name="*" read-only="true"/>
+		</tx:attributes>
+	</tx:advice>
+	
+	<!-- AOP事务：把事务切面织入到Service层 -->
+	<aop:config>
+		<aop:pointcut expression="execution(public * xml.service.*.*(..))" id="txPointcut"/>
+		<aop:advisor advice-ref="txAdvice" pointcut-ref="txPointcut"/>
+	</aop:config>
+	
+</beans>
+```
+
+```java 
+//测试
+
+@RunWith(value=SpringJUnit4ClassRunner.class)
+@ContextConfiguration(value="classpath:applicationContext.xml")
+public class TestAccount {
+
+	@Autowired
+	AccountService ser;
+	
+	@Test
+	public void testTransfer(){
+        //事务切入成功
+		ser.transfer(1, 2, 100);
+	}
+}
+```
 
