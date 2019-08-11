@@ -2130,3 +2130,150 @@ public class TestAccount {
 }
 ```
 
+##### 2.2tx标签介绍
+
+```xml
+<tx:advice transaction-manager="引入事务管理平台" id="txAdvice"></tx:advice>
+1.tx:advice  用于配置事务相关信息；  其中tansaction-manager属性是引入对应类型的事务管理；
+2.tx:attributes  用于配置哪些方法可以作为事务方法（为后面切点进行补充）
+	<tx:method></tx:method>
+3.tx：method  设置具体要添加事务的方法和其他属性。
+	1）name是必须的，表示与事务属性关联的方法名（业务方法名），对切入点进行细化。通配符*可以用来指定一批关联到相同的事务属性的方法。
+       如：get*   handle*   等等...
+	2）propagation不是必须的，默认值是REQUIRED表示事务传播行为，包括REQUIRED,SUPPORTS,MANDATORY,REQUIRES_NEW,NOT_SUPPORTED,NEVER,NESTED
+	3）isolation 不是必须的  默认值是DEFAULT
+	4)timeout 不是必须的 默认值-1（永不超时），表示事务超时时间（以秒为单位）
+	5）read-only 不是必须的 默认值false不是只读的，表示事务是否只读事务
+	6）rollback-for 不是必须的  表示将被触发进行回滚的Exception；以逗号分开，默认对RunTimeException进行回滚；
+	7）no-rollback-for 不是必须的，表示不被触发进行回滚的WException；以逗号分开。
+```
+
+##### 2.3注解方式配置事务
+
+```xml
+步骤如下：
+1.对命名空间进行改造
+	xmlns:tx="http://www.springframework.org/schema/tx"
+    http://www.springframework.org/schema/tx
+    http://www.springframework.org/schema/tx/spring-tx.xsd
+2.开启支持注解事务的驱动
+	<tx:annotation-driven transaction-manager="引入事务管理平台"/>
+3.在相应service层方法上使用@Transactional进行标注，以说明该方法需要事务
+```
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+xmlns:p="http://www.springframework.org/schema/p"
+xmlns:tx="http://www.springframework.org/schema/tx"
+xmlns:aop="http://www.springframework.org/schema/aop"
+xmlns:context="http://www.springframework.org/schema/context"
+xsi:schemaLocation="http://www.springframework.org/schema/beans
+http://www.springframework.org/schema/beans/spring-beans.xsd
+http://www.springframework.org/schema/context
+http://www.springframework.org/schema/context/spring-context.xsd
+http://www.springframework.org/schema/tx
+http://www.springframework.org/schema/tx/spring-tx.xsd
+http://www.springframework.org/schema/aop
+http://www.springframework.org/schema/aop/spring-aop.xsd" >
+
+	<!-- 组件扫描 -->
+	<context:component-scan base-package="anno"></context:component-scan>
+	<!-- 加载外部properties属性文件 -->
+	<context:property-placeholder location="db.properties"/>
+	
+	
+	<!-- C3p0数据源创建 -->
+	<bean id="dataSource" class="com.mchange.v2.c3p0.ComboPooledDataSource">
+		<property name="driverClass" value="${jdbc.driver}"></property>
+ 		<property name="jdbcUrl" value="${jdbc.url}"></property>
+ 		<property name="user" value="${jdbc.username}"></property>
+ 		<property name="password" value="${jdbc.password}"></property>
+	</bean>
+	
+	<!-- JdbcTemplate模板 -->
+	<bean id="temp" class="org.springframework.jdbc.core.JdbcTemplate">
+		<constructor-arg index="0" ref="dataSource"></constructor-arg>
+	</bean>
+	
+	<!-- JDBC事务管理平台 -->
+	<bean id="txManager" class="org.springframework.jdbc.datasource.DataSourceTransactionManager">
+		<property name="dataSource" ref="dataSource"></property>
+	</bean>
+	
+	<!-- 开启支持事务注解的驱动 -->
+	<tx:annotation-driven transaction-manager="txManager"/>
+</beans>
+```
+
+```java
+//dao层
+@Repository
+public class AccountDao {
+	
+	@Autowired
+	private JdbcTemplate temp;
+
+	/**
+	 * 转入
+	 * @param toId
+	 * @param money
+	 */
+	public void in(int toId,int money){
+		
+		temp.update("update account set balance=balance+? where id = ?", money,toId);
+	}
+	/**
+	 * 转出
+	 * @param fromId
+	 * @param money
+	 */
+	public void out(int fromId,int money){
+		
+		temp.update("update account set balance=balance-? where id = ?", money,fromId);
+	}
+}
+```
+
+```java
+//service
+
+@Service
+@Transactional(readonly=true)
+public class AccountService {
+
+	@Autowired
+	private AccountDao dao;
+	
+    //注意：方法上的@Transactional会境境覆盖类上的@Transactional配置
+	@Transactional(isolation=Isolation.READ_COMMITTED,propagation=Propagation.REQUIRED)
+	public void transfer(int fromId,int toId,int money){
+		
+		dao.out(fromId, money);
+		
+		System.out.println(1/0);
+		
+		dao.in(toId, money);
+		
+	}
+	
+}
+```
+
+```java
+//测试
+@RunWith(value=SpringJUnit4ClassRunner.class)
+@ContextConfiguration(value="classpath:applicationContext-anno.xml")
+public class TestAccountAnno {
+
+	@Autowired
+	AccountService ser;
+	
+	@Test
+	public void testTransfer(){
+		ser.transfer(1, 2, 100);
+	}
+}
+```
+
