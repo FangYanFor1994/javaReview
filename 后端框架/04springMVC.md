@@ -684,3 +684,861 @@ public ModelAndView doBiz(@RequestHeader(value="Cookie") String val){
   
 ```
 
+### 九、springmvc数据传递
+
+```
+数据传递：把控制器数据传递到jsp页面等视图中；
+```
+
+####1.常用封装数据的对象
+
+```java
+1.HttpServletRequest
+2.ModelAndView
+3.Model
+4.ModelMap
+5.Map
+
+说明：ModelMap本质是Map集合
+	Model是接口，其实现类ExtendedModelMap,而ExtendedModelMap是ModelMap的子类，所以ExtendedModelMap本质也是Map集合，而ModelAndView对象也封装了ModelMap对象，最终，数据都是存放在Map中。
+```
+
+#### 2.Model等对象和HttpServletRequest的联系（源码）
+
+```java
+//原码如下：
+//说明：源码中遍历Map集合，把里面的元素全部放进httpServletRequest域对象中，才得以传递到前端
+protected void exposeModelAsRequestAttributes(Map<String, Object> model, HttpServletRequest request) throws Exception {
+    	//去迭代 model中的数据
+		for (Map.Entry<String, Object> entry : model.entrySet()) {
+			String modelName = entry.getKey();
+			Object modelValue = entry.getValue();
+			if (modelValue != null) {
+                //封装到request域中
+				request.setAttribute(modelName, modelValue);
+				if (logger.isDebugEnabled()) {
+					logger.debug("Added model object '" + modelName + "' of type [" + modelValue.getClass().getName() +
+							"] to request in view with name '" + getBeanName() + "'");
+				}
+			}
+			else {
+				request.removeAttribute(modelName);
+				if (logger.isDebugEnabled()) {
+					logger.debug("Removed model object '" + modelName +
+							"' from request in view with name '" + getBeanName() + "'");
+				}
+			}
+		}
+	}
+```
+
+### 十、springmvc参数绑定
+
+#### 1.参数绑定介绍
+
+```java
+在springmvc中，接收页面提交的数据时通过方法形参来接收的，从客户端请求的key/value数据，经过参数绑定，将key/value数据绑定到controller方法的形参上，然后就可以在controller中使用该参数了。
+原理：使用Convert组件完成，且springmvc提供了很多converter转换器（进行任意类型转换）
+```
+
+#### 2.参数绑定的类型
+
+```java
+1.内置类型参数绑定  
+	在控制器方法的形参上使用该类型的变量，spring会自动创建相应类型的对象绑定到该形参上（和参数名无关）；  例：HttpServletRequest/HttpServletResponse/HttpSession/Model/ModelMap/Map
+2.简单类型参数绑定
+	8种基本类型数据（及包装类）及String类型数据；  请求参数名必须和方法形参名称一致，则会自动绑定数据到该方法形参上。
+3.数据类型参数绑定
+	请求参数名必须和方法形参名称一致，则自动绑定数据到该方法形参上。
+	public String doBiz2(String[] arr)
+    http://localhost:8080/day12_springmvc/user4/bind2.do?arr=admin&arr=user
+4.pojo类型参数绑定
+	http请求中的key要和pojo的setter方法的后缀一致，即可完成参数绑定；
+5.复杂pojo类型参数绑定
+	pojo中有属性为addr的pojo类型属性，且addr中有id属性，通过addr.id可以为其绑定值
+	http://localhost:8080/day12_springmvc/user4/bind5.do?id=1&addr.id=1000
+6.集合参数绑定list
+	springmvc不支持集合类型参数直接绑定形参上，可以把集合类型封装到pojo中，则可以完成参数绑定
+	 //集合类型属性
+	private List<Address> addrs;
+	地址1：<input type="text" name="addrs[0].addrname">
+	说明：addrs为pojo中list集合的属性名称，通过addrs[0].addrname可以为集合的第一个元素中的addrname属性绑定值
+7.集合参数绑定Map
+	   //集合类型属性
+	private Map<String,Address> map;
+	 <!--map集合的key可以自定义-->   
+	map[0]：<input type="text" name="map['key1'].addrname">
+```
+
+**8.特殊类型参数绑定**
+
+```java
+//需求：
+如果传到控制器方法日期格式与springmvc默认日期不一致，会导致参数绑定失败，这式需要自定义自己的日期参数绑定器。
+//步骤
+1.定义参数绑定器类，该类要实现convert接口，重写绑定规则
+2.使用FormattingConversionServiceFactoryBean来创建convert对象
+```
+
+```java
+//自定义参数绑定器
+public class MyDateConverter implements Converter<String, Date>{
+
+	@Override
+	public Date convert(String source) {
+		//source表示传递到控制器的参数，一般String类型
+		System.out.println(source);
+		try {
+			SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+			Date date = sdf.parse(source);
+			return date;
+		} catch (Exception e) {
+			return new Date();
+		}
+		
+	}
+}
+```
+
+```xml
+//在springmvc.xml文件中配置参数绑定器
+<?xml version='1.0' encoding='UTF-8'?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+xmlns:p="http://www.springframework.org/schema/p"
+xmlns:context="http://www.springframework.org/schema/context"
+xmlns:mvc="http://www.springframework.org/schema/mvc"
+xsi:schemaLocation="
+http://www.springframework.org/schema/beans
+http://www.springframework.org/schema/beans/spring-beans.xsd
+http://www.springframework.org/schema/context
+http://www.springframework.org/schema/context/spring-context.xsd
+http://www.springframework.org/schema/mvc
+http://www.springframework.org/schema/mvc/spring-mvc.xsd">
+
+	
+
+	<!--把自定义参数绑定器载入springmvc环境：请使用conversion-service属性-->
+	<mvc:annotation-driven conversion-service="conversionService"></mvc:annotation-driven>
+	
+	<!-- 自定义参数绑定器 -->
+	<bean id="conversionService" class="org.springframework.format.support.FormattingConversionServiceFactoryBean">
+		<property name="converters">
+			<set>
+				<bean class="util.MyDateConverter"></bean>
+			</set>
+		</property>
+	</bean>
+</beans>
+```
+
+```java
+//控制器
+	/*
+	 * 9.日期类型:自定义参数绑定器
+	 */
+	@RequestMapping("/bind9.do")
+	public String doBiz9(Date date){
+		
+		System.out.println(date);
+		
+		return "index";
+	}
+	
+```
+
+```java
+//请求的url
+http://localhost:8080/day12_springmvc/user4/bind9.do?date=2010-10-10
+```
+
+**注意：如果只是关于日期的转化，可以使用@DateTimeFormat注解重新定义日期格式**
+
+```java
+public class User {
+	
+	@DateTimeFormat(pattern="yyyy-MM-dd")
+	private Date birthday;
+  
+    //省略getter和setter方法
+}
+```
+
+```java
+   //控制器
+	/*
+	 * 10.日期类型:把日期类型封装到pojo中
+	 */
+	@RequestMapping("/bind10.do")
+	public String doBiz10(User user){
+		
+		System.out.println(user.getBirthday());
+		
+		return "index";
+	}
+```
+
+```java
+//请求的url
+http://localhost:8080/day12_springmvc/user4/bind9.do?birthday=2010-10-10
+```
+
+### 十一、RESTful风格编程
+
+#### 1.RESTful概念
+
+```java
+REST:即Representational State Transfer , (资源)表现层状态转化,是目前最流行的一种互联网软件架构。它结构清晰、符合标注、易于理解、方便扩展，所以越来越多的网站采用！
+具体说，就是HTTP协议里面,四个表示操作方式的动词:GET POST PUT DELETE
+它们分别代表着四种基本操作（一般放在请求头中）:
+1.GET用来获取资源
+2.POST用来创建新资源
+3.PUT用来更新资源
+4.DELETE用来删除资源
+另外，RESTful对URL链接也有要求：
+URL链接上不能出现动词，也不能出现除了/和名词之外的其他字符，如.?&=都不允许出现！
+所以，一个符合标准RESTful风格的url如下：
+http://localhost:8080/工程名/资源位置/参数1/参数2/
+```
+
+#### 2.实现步骤（get方式）
+
+```
+1.DispatcherServlet的拦截路径使用/表示
+2.组织符合RESTful风格的URL链接
+3.在controller的方法上使用注解@PathVariable注解标注参数
+```
+
+**代码**
+
+```xml
+<!--DispatcherServlet的拦截路径使用/表示-->
+
+<servlet>
+		<servlet-name>DispatcherServlet</servlet-name>
+		<servlet-class>org.springframework.web.servlet.DispatcherServlet</servlet-class>
+		<init-param>
+			<param-name>contextConfigLocation</param-name>
+			<param-value>classpath:springmvc.xml</param-value>
+		</init-param>
+	</servlet>
+	<servlet-mapping>
+		<servlet-name>DispatcherServlet</servlet-name>
+		<url-pattern>/</url-pattern>
+	</servlet-mapping>
+```
+
+```java
+@Controller
+@RequestMapping("/rest")
+public class RestController {
+
+    //@PathVariable作用：把路径变量和方法形参进行绑定
+	@RequestMapping(value="/test1/{id}/{username}",method=RequestMethod.GET)
+	public String doRest(@PathVariable("id")int id,@PathVariable("username")String username){
+		
+		System.out.println(id+","+username);
+		
+		return "index";
+	}
+}
+```
+
+```java
+//符合RESTful风格的url请求（发送的是get请求）：
+http://localhost:8080/day13_springmvc/rest/test1/1/admin
+```
+
+#### 3.实现步骤（post方式）
+
+```xml
+1.在web.xml文件配置过滤器
+    <filter>
+    	<filter-name>HiddenHttpMethodFilter</filter-name>
+    	<filter-class>org.springframework.web.filter.HiddenHttpMethodFilter</filter-class>
+    </filter>
+    <filter-mapping>
+    	<filter-name>HiddenHttpMethodFilter</filter-name>
+    	<url-pattern>/*</url-pattern>
+    </filter-mapping>	
+2.使用表单，且表单的method="post"发送http请求
+
+3.在表单中必须有隐藏域：
+	<input type="hidden" name="_method" value="GET|POST|PUT|DELETE"></input>
+```
+
+**代码**
+
+```java
+@Controller
+@RequestMapping("/rest2")
+public class RestController2 {
+	
+	@RequestMapping("/torest")
+	public String toRest(){
+		
+		return "rest";
+	}
+	
+	// 查寻
+	@RequestMapping(method = RequestMethod.GET)
+	public String doGet(int id) {
+
+		System.out.println("get");
+		System.out.println(id);
+
+		return "index";
+	}
+	// 增
+	@RequestMapping(method = RequestMethod.POST)
+	public String doPost(int id, String username) {
+
+		System.out.println("post");
+		System.out.println(id + "," + username);
+
+		return "index";
+	}
+	// 删
+	@RequestMapping(method = RequestMethod.DELETE)
+	public String doDelete(int id) {
+
+		System.out.println("delete");
+		System.out.println(id);
+
+		return "index";
+	}
+
+	// 改
+	@RequestMapping(method = RequestMethod.PUT)
+	public String doDelete(int id, String username) {
+
+		System.out.println("put");
+		System.out.println(id + "," + username);
+
+		return "index";
+	}
+}
+```
+
+```xml
+
+<!-- get请求 -->
+<form action="${pageContext.request.contextPath}/rest2" method="post">
+	ID:<input type="text" name="id" >
+    <!--隐藏域的name必须为_method-->
+	<input type="hidden" name="_method" value="GET"></input>
+	
+	<input type="submit" value="get">
+</form>
+
+<!-- post请求 -->
+<form action="${pageContext.request.contextPath}/rest2" method="post">
+	ID：<input type="text" name="id" >
+	USRNAME:<input type="text" name="username" >
+    <!--隐藏域的name必须为_method-->
+	<input type="hidden" name="_method" value="POST"></input>
+	<input type="submit" value="post">
+</form>
+
+<!-- put请求 -->
+<form action="${pageContext.request.contextPath}/rest2" method="post">
+	ID：<input type="text" name="id" >
+	USRNAME:<input type="text" name="username" >
+    <!--隐藏域的name必须为_method-->
+	<input type="hidden" name="_method" value="PUT"></input>
+	
+	<input type="submit" value="put">
+</form>
+
+<!-- delete请求 -->
+<form action="${pageContext.request.contextPath}/rest2" method="post">
+	ID：<input type="text" name="id" >
+    <!--隐藏域的name必须为_method-->
+	<input type="hidden" name="_method" value="DELETE"></input>
+	
+	<input type="submit" value="delete">
+</form>
+```
+
+### 十二、静态资源处理
+
+```xml
+当DispatcherServlet使用/来匹配URL时，会拦截静态资源，我们可以在springmvc.xml配置<mvc:resources>来处理
+```
+
+```xml
+<!--静态资源处理：location匹配URL中的字符，mapping表示直接映射到相应文件夹下的资源-->
+<mvc:resources location="/static/" mapping="/static/**"></mvc:resources>
+<mvc:resources location="/imgs/" mapping="/imgs/**">
+</mvc:resources>
+<mvc:resources location="/css/" mapping="/css/**">
+</mvc:resources>
+<mvc:resources location="/js/" mapping="/js/**">
+</mvc:resources>
+```
+
+### 十三、数据自动回显
+
+```
+Springmvc对在控制器方法形参绑定pojo类型，默认会把该pojo对象放在request域中，其中key为该pojo类型类名的小写；
+```
+
+```java
+@RequestMapping("/login.do")
+	public String doLogin(User u){
+		//springmvc默认会执行下面操作：key为User类名的小写
+		//model.addAttribute("user", u);
+		return "login";
+	}
+```
+
+```jsp
+<form action="${pageContext.request.contextPath}/user/login.do" method="post">
+
+	用户名：<input type="text" name="username" value="${user.username}">
+	<br>
+	密码：<input type="password" name="password" value="${user.password}">
+	<br>
+	<input type="submit" value="登录">
+</form>
+```
+
+### 十四、JSON数据处理
+
+```xml
+<!--springmvc进行json数据处理时，需要以下插件包-->
+<dependency>
+    <groupId>com.fasterxml.jackson.core</groupId>
+    <artifactId>jackson-databind</artifactId>
+    <version>2.8.9</version>
+</dependency>
+
+也可以引入下面包：
+<dependency>
+    <groupId>com.google.code.gson</groupId>
+    <artifactId>gson</artifactId>
+    <version>2.2.4</version>
+</dependency>
+```
+
+```java
+使用步骤：
+前端通过ajax请求，发送json或键=值的数据到后台，后台通过参数绑定可以获取前端传来的值；
+后端加@Responsbody注解，可以返回一个java对象或者json字符串，前端ajax接收dataType："text",可以接收字符串，dataType:"json"，可以将后端的json字符串或者java对象转化为json对象；
+```
+
+### 十五、异常处理
+
+```
+SpringMVC通过HandlerExceptionResolver的实现类进行异常的统一处理：
+1.DefaultHandlerExceptionResolver(默认被始用)
+2.SimpleMappingExceptionResolver
+3.AnnotationMethodHandlerExceptionResolver(默认被始用)
+4.ResponseStatusExceptionResolver(默认被始用)
+```
+
+#### 1.DefaultHandlerExceptionResolver进行异常处理
+
+```xml
+只需要在web.xml配置异常映射即可：
+<error-page>
+    <error>404</error>
+    <location>/WEB-INF/jsp/404.jsp</location>
+</error-page>
+
+<error-page>
+    <error>500</error>
+    <location>/WEB-INF/jsp/500.jsp</location>
+</error-page>
+```
+
+#### 2.AnnotationMethodHandlerExceptionResolver进行异常处理
+
+```
+支持@ExceptionHandler
+    1.该注解标注在控制器的方法上
+	局部异常处理：只会对该控制器的所有方法发生的异常进行处理，对别的控制器发生的异常不会处理
+	2.可以标注在普通的异常处理类的相应方法上
+	全局异常处理：对所有控制器内部的方法产生的异常都会做统一处理。
+```
+
+##### 2.1局部异常处理
+
+```java
+@Controller
+@RequestMapping("/exce")
+public class ExceptionController {
+
+	@RequestMapping("/test.do")
+	public String doBiz(){
+		
+		System.out.println(1/0);
+		
+		return "index";
+	}
+	
+    //只对该控制器中方法抛出的异常进行统一处理。
+	@ExceptionHandler
+	public String HandlerException(Exception e){
+		
+		e.printStackTrace();
+		
+		return "500";//逻辑视图名
+	}
+}
+```
+
+##### 2.2全局异常处理
+
+```java
+//自定义类来处理全局异常，一般该类使用@ControllerAdvice来标注
+
+/**
+ * 自定义全局异常处理组件
+ * @author Administrator
+ */
+@ControllerAdvice
+public class ExceHandler {
+
+	@ExceptionHandler
+	public String HandlerException(Exception e){
+		
+		e.printStackTrace();
+
+		return "100";//逻辑视图名
+	}
+}
+
+```
+
+```
+如果有全局异常处理器和局部异常处理方法同时对同一异常进行处理，则优先级如下：
+局部异常处理>全局异常处理
+
+```
+
+###十六、拦截器
+
+#### 1.执行原理
+
+```java
+springMVC的拦截器类似于servlet中的过滤器，需要先定义一个类实现HandlerIntercepter接口！
+添加未实现的方法，在springmvc配置中配置！
+除了.jsp以外的资源都可以进行拦截！
+```
+
+#### 2.实现步骤
+
+```
+1.创建java类实现HandlerIntercepter接口，重写方法；
+2.在springmvc.xml文件中配置该拦截器对象；
+```
+
+```java
+//当访问控制器时，拦截器会被自动调用
+public class LoginIntercepter implements HandlerInterceptor{
+    /**
+	 * 到达控制器之前执行的方法
+	 * true表示调用下一个拦截器或控制器
+	 * false将不会向下调用，即被拦截
+	 */
+	@Override
+	public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler)
+			throws Exception {
+		
+		/*
+		 * 业务需求：访问login.jsp无需处于登录状态，但其他资源的访问需要用户处于登录状态。
+		 */
+		//判断该用户是否处于登录状态
+		User sessionUser = (User) request.getSession().getAttribute("sessionUser");
+		
+		if(sessionUser !=null){
+			return true;
+		}
+		System.out.println("preHandle");
+		//重定向到login.jsp页面，让用户去登录
+		response.sendRedirect(request.getContextPath()+"/user/tologin.do");
+		
+		return false;
+	}
+
+	/**
+	 * 控制器方法执行完后将要执行的方法
+	 */
+	@Override
+	public void postHandle(HttpServletRequest request, HttpServletResponse response, Object handler,
+			ModelAndView modelAndView) throws Exception {
+		
+		System.out.println("postHandle");
+		
+	}
+
+	/**
+	 * 控制器方法执行完后，返回返回值后将要执行的方法
+	 */
+	@Override
+	public void afterCompletion(HttpServletRequest request, HttpServletResponse response, Object handler, Exception ex)
+			throws Exception {
+		
+		System.out.println("afterCompletion");
+	}
+    
+}
+```
+
+```xml
+<!--在springmvc.xml文件中配置拦截器-->
+<!-- 配置自定义拦截器 -->
+	<mvc:interceptors>
+		<mvc:interceptor>
+			<!-- 
+				/**:表示匹配所有url
+				/user/*:匹配特定路径下的url
+				/user/**:匹配特定路径下,更深路径的url
+			 -->
+			<mvc:mapping path="/**"/>
+            <!--exclude-mapping表示对该url不做拦截-->
+			<mvc:exclude-mapping path="/static/**"/>
+			<mvc:exclude-mapping path="/imgs/**"/>
+			<mvc:exclude-mapping path="/css/**"/>
+			<mvc:exclude-mapping path="/js/**"/>
+			<mvc:exclude-mapping path="/user/tologin.do"/>
+			<mvc:exclude-mapping path="/user/login.do"/>
+			<!-- 拦截器 -->
+			<bean class="interceptor.LoginInterceptor"></bean>
+		</mvc:interceptor>
+	</mvc:interceptors>
+```
+
+```xml
+<!--web.xml文件配置-->
+<?xml version="1.0" encoding="UTF-8"?>
+<web-app xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns="http://java.sun.com/xml/ns/javaee"
+	xsi:schemaLocation="http://java.sun.com/xml/ns/javaee http://java.sun.com/xml/ns/javaee/web-app_2_5.xsd"
+	version="2.5">
+	<display-name>day11_springmvc</display-name>
+
+	
+
+	<!-- 前端处理器 -->
+	<servlet>
+		<servlet-name>DispatcherServlet</servlet-name>
+		<servlet-class>org.springframework.web.servlet.DispatcherServlet</servlet-class>
+		<init-param>
+			<param-name>contextConfigLocation</param-name>
+			<param-value>classpath:springmvc.xml</param-value>
+		</init-param>
+	</servlet>
+	<servlet-mapping>
+		<servlet-name>DispatcherServlet</servlet-name>
+		<url-pattern>/</url-pattern>
+	</servlet-mapping>
+
+
+</web-app>
+```
+
+#### 3.过滤器和拦截器比较
+
+```java
+1.拦截范畴不同：
+	拦截器是框架中的概念，过滤器是servlet中的概念！
+2.实现原理不同：
+	拦截器是基于AOP原理实现的，过滤器是基本的方法回调；
+3.拦截范围不同：
+	拦截器会拦截除了.jsp以为的资源，过滤器会拦截所有路径，包括jsp资源；
+4.拦截粒度不同：
+	过滤器是粗粒度过滤，而拦截器粒度更细，可以拦特定方法；
+```
+
+### 十七、文件上传
+
+```java
+springmvc为文件上传提供了直接支持，这种支持是通过即插即用的MultipartResolver实现，spring使用Jakarta Commons FileUpload技术实现了一个MultipartResolver实现类:CommonsMultipartResolver。
+在SpringMVC上下文中默认没有装配MultipartResolver,因此默认情况下不能处理文件上传工作。如果想使用
+Spring的文件上传功能,则需要先在上下文中配置MultipartResolver。
+```
+
+#### 1.实现步骤
+
+```xml
+1.引入依赖包
+<dependency>
+        <groupId>commons-fileupload</groupId>
+        <artifactId>commons-fileupload</artifactId>
+        <version>1.3.1</version>
+	</dependency>
+    <dependency>
+        <groupId>commons-io</groupId>
+        <artifactId>commons-io</artifactId>
+        <version>2.4</version>
+    </dependency>
+2.在springMVC.xml文件中配置CommonsMutipartResolver对象，该对象名字必须是multipartResolver
+<bean name="multipartResolver" class="org.springframework.web.multipart.commons.CommonsMultipartResolver"></bean>
+
+3.form表单，表单提交的方法method="post",设置enctype="multipart/form-data"	使用<input type="file" name="img"></input>标签进行文件上传操作；
+
+4.在控制器的方法形参上绑定参数MultipartFile,该参数是对文件上传内容的抽象。
+@RequestMapping("/upload.do")
+public String doUpload(MultipartFile img){
+	//文件上传操作
+	img.transferTo("");
+}
+```
+
+#### 2.单个文件上传代码
+
+```xml
+<!--springmvc.xml文件配置-->
+
+	<!-- 注意：该bean的名字必须为multipartResolver，否则会导致上传失败 -->
+	<bean name="multipartResolver" class="org.springframework.web.multipart.commons.CommonsMultipartResolver">
+		<!-- 限制文件上传字节数 -->
+		<property name="maxUploadSize" value="1000000"></property>
+		<!-- 文本文件字符编码 -->
+		<property name="defaultEncoding" value="utf-8"></property>
+	</bean>
+	
+```
+
+```java
+	//控制器
+
+	//注意：方法形参MultipartFile img，变量名img必须和file表单的name属性值一致。
+	@RequestMapping("/upload.do")
+	public String doUpload(MultipartFile img,HttpServletRequest request) throws IllegalStateException, IOException{
+		
+		//表单控制的name属性的值
+		System.out.println(img.getName());
+		//文件的名字
+		System.out.println(img.getOriginalFilename());
+		//文件大小
+		System.out.println(img.getSize());
+		//文件类型
+		System.out.println(img.getContentType());
+		
+		//上传操作D盘根目录下
+		//File file = new File("D:/"+img.getOriginalFilename());
+		
+		//上传到服务器中WebApp/uploads文件夹下
+		String savepath = request.getServletContext().getRealPath("/uploads/"+img.getOriginalFilename());
+		File file = new File(savepath);
+        //使用transferTo方法上传到指定位置
+		img.transferTo(file);
+		
+		return "index";
+	}
+```
+
+```jsp
+//JSP页面
+<!--文件上传时，必须设置表单method="post",enctype="multipart/form-data"-->
+<form action="${pageContext.request.contextPath}/file/upload.do" method="post" enctype="multipart/form-data">
+
+	<input type="file" name="img">
+	<br>
+	<input type="submit" value="文件上传">
+</form>
+```
+
+#### 3.多文件上传
+
+```java
+//model类
+public class User {
+
+	private String username;
+	private String password;
+	//把文件封装到User类中，以集合的方式存放
+	private List<MultipartFile> img;
+	
+    //省略getter和setter
+｝
+```
+
+```java
+//控制器
+	@RequestMapping("/upload2.do")
+	public String doUpload2(User user) throws IllegalStateException, IOException{
+		
+        //从user对像中取出集合数据，进行迭代上传即可
+		System.out.println(user.getImg());
+        
+        //上传步骤省略
+		
+		return "index";
+	}
+
+```
+
+```jsp
+//JSP页面
+
+<form action="${pageContext.request.contextPath}/file/upload2.do" method="post" enctype="multipart/form-data">
+
+    <!--表单的name必须一致-->
+	<input type="file" name="img">
+	<br>
+	<input type="file" name="img">
+	<br>
+	<input type="file" name="img">
+	<br>
+	<input type="submit" value="文件上传">
+</form>
+
+```
+
+### 十八、文件下载
+
+#### 1.步骤
+
+```java
+1.获取 文件File
+2.设置响应头HttpHeaders
+	HttpHeaders headers = new HttpHeaders();
+3.设置头中文件响应方式
+	headers.add("Content-Disposition","attchement;filenam=下载文件名");
+4.设置头中响应状态码
+	HttpStatus statusCode = HttpStatus.OK;
+5.控制器返回ResponseEntity<byte[]>对象，让spring组件去处理。
+	ResponseEntity<byte[]> entity = new ResponseEntity<byte[]>(byte[],headers,statusCode);
+```
+
+#### 2.代码
+
+```java
+  //控制器
+	/*
+	 * 文件下载需使用ResponseEntity作为方法返回值
+	 */
+	@RequestMapping("/download.do")
+	public ResponseEntity<byte[]> doDownload() throws IOException{
+		
+		//一般从数据库表中读取相应文件位置，这里暂定为下载d:/1.jpg相应文件
+		String location = "d:/1.jpg";
+		//1.设置响应头信息:filename属性用来设置下载后的文件名称
+		HttpHeaders headers = new HttpHeaders();
+		headers.add("Content-Disposition", "attachement;filename=1.jpg");
+		//2.设置响应状态码200
+		HttpStatus statusCode = HttpStatus.OK;
+		//3.创建输入流，读取相应文件
+		FileInputStream is = new FileInputStream(location);
+		byte[] bs = new byte[is.available()];
+		//读入字节数组
+		is.read(bs);
+		//4.关闭流
+		is.close();
+		
+		ResponseEntity<byte[]> entity = new ResponseEntity<>(bs,headers,statusCode);
+		return entity;
+	}
+```
+
+```jsp
+<!--jsp-->
+<body>
+	<a href="${pageContext.request.contextPath}/file2/download.do">下载</a>
+</body>
+```
+
