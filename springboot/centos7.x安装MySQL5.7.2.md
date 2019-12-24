@@ -2,6 +2,25 @@
 
  说明：本文主要描述在centos7上安装mysql5.7.2。文中出现的/data/mysql 为本次安装mysql的目录，可以根据自己需要进行修改。最好将系统/etc/selinux/config文件中设置SELINUX=disabled
 
+```properties
+centos用户:root / fangyan
+	   密码:123
+
+MySQL用户root   密码:root
+
+linux系统版本： CentOS 7.2 64位
+安装源文件版本：mysql-5.7.22-linux-glibc2.12-x86_64.tar.gz
+
+mysql安装位置：/software/mysql
+
+数据库文件数据位置：/data/mysql
+
+```
+
+
+
+
+
 ### 1.   压缩版安装
 
 #### 1.1     查看操作系统版本
@@ -48,267 +67,219 @@
 
 ![img](assets/clip_image001.jpg) 
 
+A temporary password is generated for root@localhost: *frCJtD5wrtc
+
 #### 1.3   安装过程
 
-安装前先准备好压缩安装包或者到mysq官网下载即可，将安装报上传至/data/目录下后解压 
-
-​	cd /data
-
-![img](assets/clip_image001-1577031112345.jpg) 
-
-​	tar -zxvf 安装包 -C /data/ 
-
-![img](assets/clip_image001-1577031140709.jpg) 
-
-**目录名太长了，重命名为mysql** 
-
-​	mv mysql-5.7.22-linux-glibc2.12-x86_64 mysql 
-
-![img](assets/clip_image001-1577031163183.jpg) 
-
-*在mysql下面新建目录data*
-
-![img](assets/clip_image001-1577031234355.jpg) 
-
-#### 1.4  查看mysql用户和组 如果存在，需要删除怎执行以下步骤
-
-查看mysql用户或组是否存在 
-
-​	id mysql 
-
-![img](assets/clip_image001-1577031355059.jpg)
-
-如需删除用户和组，执行下列操作
-
-\# groupdel mysql
-
-\# userdel -f mysql 
-
-不行就进入 vi /etc/grpup 找到mysql 在其前面加上 # 
-
-如下，说明没有用户了 
-
-![img](assets/clip_image001-1577031452641.jpg) 
-
-#### 1.5     添加mysql用户组和用户，并且将mysql用户和mysql组关联
-
-创建mysql组 
-
-​	groupadd mysql
-
-查看是否创建成功
-
-​	cat /etc/**group |** grep mysql 
-
-![img](assets/clip_image001-1577031565974.jpg) 
-
-创建mysql用户 
-
-​	useradd -r -g mysql mysql 
-
-查看是否创建成功 
-
-​	cat /etc/**passwd |** grep mysql 
-
-![img](assets/clip_image001-1577031620725.jpg) 
-
-给mysql用户设置密码为：mengxuegu1234 
-
-​	passwd mysql 
-
-![img](assets/clip_image001-1577031676949.jpg) 
-
-#### 1.6 给mysql授权,以便能够读写以及执行必要的文件
-
-\# chown -R mysql:mysql /data/mysql
-
-\# chmod -R 775 /data/mysql
-
-#### 1.7  进入mysql/support-files文件夹的内容，查看是否有my-default.cnf配置文件，如果没有默认的配置文件，需要手动创建一个my-default.cnf配置文件
-
-\# cd /data/mysql/support-files/
-
-\# ll
-
-![img](assets/clip_image001-1577031826731.jpg) 
-
-#### 1.8    my-default.cnf配置文件内容可直接复制下面内容：
-
 ```properties
+1、在根目录下创建文件夹software和数据库数据文件/data/mysql
+#mkdir /software/
+#mkdir /data/mysql
+
+2、上传mysql-5.7.21-linux-glibc2.12-x86_64.tar.gz文件到/software下
+#cd /software/
+#tar -zxvf mysql-5.7.21-linux-glibc2.12-x86_64.tar.gz
+
+3、更改解压缩后的文件夹名称
+#mv /software/mysql-5.7.21-linux-glibc2.12-x86_64/  /software/mysql
+
+4、创建mysql用户组和mysql用户
+#groupadd mysql
+#useradd -r -g mysql mysql
+
+5、关联myql用户到mysql用户组中
+#chown -R mysql:mysql  /software/mysql/
+#chown -R mysql:mysql  /data/mysql/
+#chown -R mysql  /software/mysql/
+#chown -R mysql  /data/mysql
+
+6、更改mysql安装文件夹mysql/的权限
+#chmod -R 755 /software/mysql/
+
+7、安装libaio依赖包，由于我买的腾讯云服务器centos系统自带的有这个依赖包所以不需要安装，不过自带的依赖包会报错，后面介绍解决办法
+查询是否暗转libaio依赖包
+#yum search libaio
+如果没安装，可以用下面命令安装
+#yum install libaio
+
+8、初始化mysql命令
+#cd /software/mysql/bin
+#./mysqld --user=mysql --basedir=/software/mysql --datadir=/data/mysql --initialize
+在执行上面命令时特别要注意一行内容   
+[Note] A temporary password is generated for root@localhost: o*s#gqh)F4Ck
+root@localhost: 后面跟的是mysql数据库登录的临时密码，各人安装生成的临时密码不一样
+如果初始化时报错如下：
+error while loading shared libraries: libnuma.so.1: cannot open shared objec
+是因为libnuma安装的是32位，我们这里需要64位的，执行下面语句就可以解决
+#yum install numactl.x86_64
+执行完后重新初始化mysql命令
+
+9、启动mysql服务
+# sh /software/mysql/support-files/mysql.server start
+上面启动mysql服务命令是会报错的，因为没有修改mysql的配置文件，报错内容大致如下：
+./support-files/mysql.server: line 239: my_print_defaults: command not found
+./support-files/mysql.server: line 259: cd: /usr/local/mysql: No such file or directory
+Starting MySQL ERROR! Couldn't find MySQL server (/usr/local/mysql/bin/mysqld_safe)
+
+10、修改Mysql配置文件
+#vim /software/mysql/support-files/mysql.server
+修改前
+if test -z "$basedir"
+then
+basedir=/usr/local/mysql
+bindir=/usr/local/mysql/bin
+if test -z "$datadir"
+then
+datadir=/usr/local/mysql/data
+fi
+sbindir=/usr/local/mysql/bin
+libexecdir=/usr/local/mysql/bin
+else
+bindir="$basedir/bin"
+if test -z "$datadir"
+then
+datadir="$basedir/data"
+fi
+sbindir="$basedir/sbin"
+libexecdir="$basedir/libexec"
+fi
+
+修改后
+
+if test -z "$basedir"
+then
+basedir=/software/mysql
+bindir=/software/mysql/bin
+if test -z "$datadir"
+then
+datadir=/data/mysql
+fi
+sbindir=/software/mysql/bin
+libexecdir=/software/mysql/bin
+else
+bindir="$basedir/bin"
+if test -z "$datadir"
+then
+datadir="$basedir/data"
+fi
+sbindir="$basedir/sbin"
+libexecdir="$basedir/libexec"
+fi
+
+保存退出
+
+#cp /software/mysql/support-files/mysql.server  /etc/init.d/mysqld
+#chmod 755 /etc/init.d/mysqld
+
+
+11、修改my.cnf文件
+#vi /etc/my.cnf
+将下面内容复制替换当前的my.cnf文件中的内容
 [client]
-port = 3306
-socket = /tmp/mysql.sock
-[mysqld]
-basedir = /data/mysql
-datadir = /data/mysql/data
-bind-address = 0.0.0.0
-port = 3306
-socket = /tmp/mysql.sock
-skip-external-locking
-key_buffer_size = 128M
-max_allowed_packet = 1M
-table_open_cache = 256
-sort_buffer_size = 1M
-read_buffer_size = 1M
-read_rnd_buffer_size = 2M
-myisam_sort_buffer_size = 8M
-thread_cache_size = 8
-query_cache_size= 16M
-max_connections = 213
-wait_timeout = 31536000
-interactive_timeout = 30
-max_connect_errors = 9
-long_query_time = 1
-tmp_table_size = 16M
-#log-bin=mysql-bin
-#binlog_format=mixed
-#server-id = 1
-lower_case_table_names = 1
-[mysqldump]
-quick
-max_allowed_packet = 8M
+no-beep
+socket =/software/mysql/mysql.sock
+# pipe
+# socket=0.0
+port=3306
 [mysql]
-no-auto-rehash
-[myisamchk]
-key_buffer_size = 12M
-sort_buffer_size = 1M
-read_buffer = 1M
-write_buffer = 1M
-[mysqlhotcopy]
-interactive-timeout
+default-character-set=utf8
+[mysqld]
+basedir=/software/mysql
+datadir=/data/mysql
+port=3306
+pid-file=/software/mysql/mysqld.pid
+#skip-grant-tables
+skip-name-resolve
+socket = /software/mysql/mysql.sock
+character-set-server=utf8
+default-storage-engine=INNODB
+explicit_defaults_for_timestamp = true
+# Server Id.
+server-id=1
+max_connections=2000
+query_cache_size=0
+table_open_cache=2000
+tmp_table_size=246M
+thread_cache_size=300
+#限定用于每个数据库线程的栈大小。默认设置足以满足大多数应用
+thread_stack = 192k
+key_buffer_size=512M
+read_buffer_size=4M
+read_rnd_buffer_size=32M
+innodb_data_home_dir = /data/mysql
+innodb_flush_log_at_trx_commit=0
+innodb_log_buffer_size=16M
+innodb_buffer_pool_size=256M
+innodb_log_file_size=128M
+innodb_thread_concurrency=128
+innodb_autoextend_increment=1000
+innodb_buffer_pool_instances=8
+innodb_concurrency_tickets=5000
+innodb_old_blocks_time=1000
+innodb_open_files=300
+innodb_stats_on_metadata=0
+innodb_file_per_table=1
+innodb_checksum_algorithm=0
+back_log=80
+flush_time=0
+join_buffer_size=128M
+max_allowed_packet=1024M
+max_connect_errors=2000
+open_files_limit=4161
+query_cache_type=0
+sort_buffer_size=32M
+table_definition_cache=1400
+binlog_row_event_max_size=8K
+sync_master_info=10000
+sync_relay_log=10000
+sync_relay_log_info=10000
+#批量插入数据缓存大小，可以有效提高插入效率，默认为8M
+bulk_insert_buffer_size = 64M
+interactive_timeout = 120
+wait_timeout = 120
+log-bin-trust-function-creators=1
+sql_mode=NO_ENGINE_SUBSTITUTION,STRICT_TRANS_TABLES
+#
+# include all files from the config directory
+#
+!includedir /etc/my.cnf.d
+
+保存退出
+
+12、启动mysql
+#/etc/init.d/mysqld start
+新版本的安装包会报错，错误内容如下：
+Starting MySQL.Logging to '/data/mysql/SZY.err'.
+2018-07-02T10:09:03.779928Z mysqld_safe The file /usr/local/mysql/bin/mysqld
+does not exist or is not executable. Please cd to the mysql installation
+directory and restart this script from there as follows:
+./bin/mysqld_safe&
+See http://dev.mysql.com/doc/mysql/en/mysqld-safe.html for more information
+ERROR! The server quit without updating PID file (/software/mysql/mysqld.pid).
+因为新版本的mysql安全启动安装包只认/usr/local/mysql这个路径。
+解决办法：
+方法1、建立软连接
+例 #cd /usr/local/mysql
+#ln -s /sofware/mysql/bin/myslqd mysqld
+方法2、修改mysqld_safe文件（有强迫症的同学建议这种，我用的这种）
+# vim /software/mysql/bin/mysqld_safe
+将所有的/usr/local/mysql改为/software/mysql
+保存退出。（可以将这个文件拷出来再修改然后替换）
+
+13、登录mysql
+#/software/mysql/bin/mysql -u root –p
+
+14、输入临时密码。临时密码就是第8条root@localhost:后面的内容
+
+15、修改mysql的登录密码
+>mysql   set password=password('root');
+>mysql  grant all privileges on *.* to root@'%' identified by 'root';
+>mysql flush privileges;
+
+16、完成，此时mysql的登录名root  登录密码root
 ```
 
-#### 1.9   重新授权
 
-\# chown -R mysql:mysql /data/mysql
-
-\# chmod -R 775 /data/mysql
-
-#### 1.10 复制support-files文件下的my-default.cnf和mysql.server，如下：
-
-\# cp my-default.cnf  /etc/**my**.cnf
-
-\# cp mysql.server  /etc/init.d/mysqld
-
-![img](assets/clip_image001-1577032074170.jpg) 
-
-#### 1.11编辑mysqld，修改为mysql的指定路径
-
-​	vi /etc/init.d/mysqld 
-
-进入编辑页面，按i 可编辑修改，按ctrl+c停止修改，然后  **:wq** 保存修改 
-
-![img](assets/clip_image001-1577032196720.jpg) 
-
-#### 1.12     把mysql路径添加到环境变量中，方便操作命令：
-
-\	# vi /etc/profile
-
-文件末尾添加export MYSQL=/data/mysql，path中加入$MYSQL/bin:
-
-![img](assets/clip_image001-1577032273543.jpg) 
-
-#### 1.13    使修改后的profile文件生效:
-
-​	source /etc/profile 
-
-![img](assets/clip_image001-1577032317399.jpg) 
-
-#### 1.14执行数据库初始化操作
-
-执行文件为mysql下bin文件夹中mysql_install_db，basedir为安装目录，datadir为数据文件目录。注：mysql_install_db在5.6版本中位于scripts文件夹，5.7已经取消该文件夹，合并到bin下: 
-
-​	cd /data/mysql/bin
-
-​	./mysqld --basedir=/data/mysql --user=mysql --datadir=/data/mysql/data --initialize 
-
-如果 报error while loading shared libraries: libaio.so.1: cannot open shared object file: No such file or directory
-
-就需要 安装libaio
-
-​	\# yum install libaio
-
-如果报：[ERROR] --initialize specified but the data directory has files in it. Aborting 
-
-![img](assets/clip_image002-1577032537504.gif) 
-
-说明已经执行过一次，需要把'/data/mysql/data目录删除，重新创建，再授权
-
-[root@centOS mysql]# cd /data/mysql
-
-[root@centOS mysql]# rm -rf data
-
-[root@centOS mysql]# mkdir data
-
-[root@centOS mysql]# chown -R mysql:mysql /data/mysql
-
-[root@centOS mysql]# chmod -R 775 /data/mysql
-
-[root@centOS mysql]#
-
-![img](assets/clip_image001-1577032583313.jpg) 
-
-然后再执行：
-
-\#cd /data/mysql/bin
-
-\# ./mysqld --basedir=/data/mysql --user=mysql --datadir=/data/mysql/data --initialize
-
-![img](assets/clip_image002-1577032605731.gif) 
-
-以上安装成功效果 
-
-#### 1.15      完成之后，启动mysql服务：
-
- 	service mysqld start 
-
-![img](assets/clip_image002-1577032654614.gif) 
-
-此时已经可以启动服务，但整个工程只算完成了一半。 
-
-注意：新版的可能会报错，因为mysqld_safe的原因，旧版本安装的时候没有报错，只需要把mysqld_safe中的默认路径修改为自己的目标路径，再执行就可以了。
-
-
-
-### 2      修改密码
-
-#### 2.1首先关闭服务 
-
-​	service mysqld stop
-
-![img](assets/clip_image002-1577032736306.gif) 
-
-#### 2.2把mysql/bin/mysqld_safe中usr/local/mysql换成指定安装的路径名，然后执行下面代码
-
-​	mysqld_safe --user=mysql --skip-grant-tables --skip-networking &
-
-![img](assets/clip_image002-1577032839489.gif) 
-
-#### 2.3    此时已经进入免过滤状态，开始修改root密码。注：5.6版本user表中密码字段是password，5.7之后改为authentication_string，不再有password。
-
-[root@ZhOu bin]# mysql
-
-mysql> use mysql;
-
-mysql> update user set authentication_string=PASSWORD('root') where user='root';
-
-mysql> flush privileges;
-
-mysql> exit;
-
-![img](assets/clip_image002-1577032915538.gif) 
-
-#### 2.4   此时，密码已经修改完成。退出重新登录，本以为搞定了，但是创建数据库，却报错了，错误是：ERROR 1820 (HY000): You must reset your password using ALTER USER statement。原来第一登录，还要再次设置密码,修改之后，创建成功。
-
-\# mysql -u root -p 
-
-mysql> alter user 'root'@'localhost' identified by 'root';
-
-mysql> flush privileges;
-
-mysql> exit;
-
-![img](assets/clip_image002-1577033047587.gif) 
 
 ### 3      设置远程登录权限
 
