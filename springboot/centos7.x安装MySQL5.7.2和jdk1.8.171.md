@@ -1,6 +1,6 @@
 **安装手册** 
 
- 说明：本文主要描述在centos7上安装mysql5.7.2。文中出现的/data/mysql 为本次安装mysql的目录，可以根据自己需要进行修改。最好将系统/etc/selinux/config文件中设置SELINUX=disabled
+ 说明：本文主要描述在centos7上安装mysql5.7.2。文中出现的/software/mysql 为本次安装mysql的目录，可以根据自己需要进行修改。最好将系统/etc/selinux/config文件中设置SELINUX=disabled
 
 ```properties
 centos用户:root / fangyan
@@ -19,7 +19,7 @@ mysql安装位置：/software/mysql
 
 
 
-
+## 一 MySQL安装
 
 ### 1.   压缩版安装
 
@@ -106,7 +106,7 @@ A temporary password is generated for root@localhost: *frCJtD5wrtc
 #cd /software/mysql/bin
 #./mysqld --user=mysql --basedir=/software/mysql --datadir=/data/mysql --initialize
 在执行上面命令时特别要注意一行内容   
-[Note] A temporary password is generated for root@localhost: o*s#gqh)F4Ck
+[Note] A temporary password is generated for root@localhost: tHrfmmXp_7fB
 root@localhost: 后面跟的是mysql数据库登录的临时密码，各人安装生成的临时密码不一样
 如果初始化时报错如下：
 error while loading shared libraries: libnuma.so.1: cannot open shared objec
@@ -323,7 +323,7 @@ mysql> exit;
 
 查看防火墙状态（关闭后显示not running，开启后显示running）
 
-\# *firewall*-*cmd* --*state*
+\# firewall-cmd --state
 
 停止防火墙firewall
 
@@ -370,3 +370,56 @@ mysql> exit;
 ### 4     设置mysql开机自启动
 
 ​	chkconfig mysqld on 
+
+## 二 jdk安装
+
+### 1.解压安装
+
+#### 1.1卸载和下载jdk
+
+```
+查看是否安装过java
+rpm -qa | grep java
+如果是centos 一般会自带两个openjdk
+rpm -e --nodeps 要卸载的包 (包通过上面的指令可以获取到)]
+先卸载7 再卸载6 最后卸载5
+命令：
+rpm -e --nodeps 要卸载的包
+```
+
+#### 1.2上传和解压
+
+将jdk压缩包上传至服务器的/software目录下
+
+解压:进入/software目录下解压
+
+​	tar -zxvf jdk-8u131-linux-x64.tar.gz
+
+将解压后安装文件夹改名
+
+​	mv jdk1.8.0_171 jdk1.8
+
+#### 1.3jdk环境变量配置
+
+1. 打开/etc/profile
+
+   vim /etc/profile
+
+2. 在文档最后添加如下内容,
+
+```properties
+export JAVA_HOME=/opt/work/jdk1.8
+export JRE_HOME=$JAVA_HOME/jre
+export CLASSPATH=.:$JAVA_HOME/lib/dt.jar:$JAVA_HOME/lib/tools.jar:$JRE_HOME/lib
+export PATH=$PATH:$JAVA_HOME/bin
+```
+
+3. 让配置生效
+
+   source /etc/profile
+
+4. 验证
+
+   java -version
+
+![1577372199354](assets/1577372199354.png)

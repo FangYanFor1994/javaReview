@@ -3735,3 +3735,42 @@ public class ProviderService {
 }
 ```
 
+### 十四 服务器部署项目
+
+#### 14.1打包常见错误
+
+1. 如果 maven projects 找不到Module ,看下pom.xml的名字是否正确
+
+   ![1577376413419](assets/1577376413419.png)
+
+   
+
+2.  如果 测试类中有错误，则无法正常打包，可在 pom.xml 中忽略测试类
+   在 <project> 标签下的 <properties> 标签中加入 <maven.test.skip>true</maven.test.skip>
+
+```xml
+<properties>
+  <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+  <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+  <java.version>1.8</java.version>
+  <!--springboot打包时跳过test-->
+  <maven.test.skip>true</maven.test.skip>
+</properties>
+```
+
+或者在打包之前在idea上勾选图标:
+
+![1577376544207](assets/1577376544207.png)
+
+#### 14.2部署项目
+
+将打好的jar包放进服务器/app/billmanage下
+
+运行命令
+
+```properties
+#后台进程进行项目
+[root@izwz9e7 opt]# nohup java -jar spring-boot-10-bill-0.0.1-SNAPSHOT.jar --
+server.port=80 &
+```
+
