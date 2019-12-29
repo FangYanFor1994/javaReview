@@ -775,11 +775,11 @@ http://localhost/consumer/product/add?productName=java
 
 ##### 3.2.1创建microservice-cloud-05-eureka-6001工程
 
-##### ![1577549793731](assets/1577549793731.png)
+![1577549793731](assets/1577549793731.png)
 
-##### ![1577549801537](assets/1577549801537.png)
+![1577549801537](assets/1577549801537.png)
 
-##### ![1577549806951](assets/1577549806951.png)
+![1577549806951](assets/1577549806951.png)
 
 ##### 3.2.2配置pom.xml文件
 
@@ -1090,5 +1090,297 @@ eureka:
 		http://ip:port
 	 yml配置将微服务注册进Eureka Server中Eureka服务地址:
 	 	eureka.client.serviceUrl.defaultZone=http://ip:port/eureka
+```
+
+### 四 Ribbon客户端负载均衡(RestTemplate+Ribbon)
+
+#### 4.1什么是负载均衡
+
+```properties
+1. LB，即负载均衡(Load Balance)，负载均衡是微服务架构中经常使用的一种技术。 负载均衡是我们处理高并发、缓解网络压力和进行服务端扩容的重要手段之一，简单的说就是将用户的请求平摊的分配到多个服务上，从而实现系统的高可用性集群。
+2.负载均衡可通过 硬件设备 及 软件 进行实现，软件比如：Nginx等，硬件比如：F5等
+3. 负载均衡相应的在中间件，例如：Dubbo 和 SpringCloud 中均给我们提供了负载均衡组件。
+```
+
+以下是负载均衡的架构图:
+
+![1577601092777](assets/1577601092777.png)
+
+用户请求先到达负载均衡器（也相当于一个服务），负载均衡器根据负载均衡算法将请求转发到微服务。负载均衡器维护一份服务端列表，根据负载均衡算法 将请求转发到相应的微服务上，负载均衡 算法有：轮训、随机、加权轮训、加权随机、地址哈希等方法，所以负载均衡可以为微服务集群分担请求，降低系统的压力。
+
+#### 4.2什么是客户端负载均衡(Ribbon)
+
+```java
+1.上图是服务端负载均衡.客户端负载均衡和服务端负载均衡最大的区别在于服务清单储存的位置.
+在客户端负载均衡中,每个客户端服务都有一份自己要访问的服务端清单,这些清单统统是从Eureka服务注册中心获取的.而在服务端负载均衡中,只要负载均衡器维护一份服务端列表.
+2.Spring Cloud Ribbon 是基于 Netflix 公司发布的开源项目 Ribbon 进行封装的一套客户端负载均衡器 。
+3.Ribbon 从 Eureka Server 获取服务列表，Ribbon根据负载均衡算法直接请求到具体的微服务，中间省去了负载均衡服务。
+```
+
+如下是Ribbon负载均衡的流程图:
+
+![1577601574234](assets/1577601574234.png)
+
+```java
+1.在消费者微服务中使用 Ribbon 实现负载均衡，Ribbon 先从EurekaServer中获取服务列表。
+2.Ribbon 根据负载均衡的算法（默认轮训算法）去调用微服务。
+```
+
+#### 4.3Ribbon服务调用配置实战
+
+```java
+无需新增新服务,在消费者端通过Ribbon进行实现负载均衡即可
+针对microservice-cloud-04-consumer-product-80 模块进行修改
+1.pom文件添加eureka客户端依赖
+2.yml文件配置eureka客户端发现
+3.RestTemplate添加@LoadBalance注解实现客户端负载均衡
+4.controller层服务调用,将ip和端口号直接改为提供者在eureka中的服务名,消费者就可以在eureka服务中发现提供者从而进行调用;
+5.在启动类上加@EnableEurekaClient标识其为Eureka客户端
+
+//注意:1.ribbon在引入eureka client时会自动依赖进来,核心注解@LoadBalance,将该注解标识在RestTemplate注册bean上,即可实现客户端负载均衡.(默认轮训算法)  2.只有使用@LoadBalance才可以在controller层使用服务名调用服务
+```
+
+##### 4.3.1修改pom文件
+
+添加配置:
+
+```xml
+<!-- 导入Eureka-client依赖 -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
+        </dependency>
+
+<!--由于依赖了spring-cloud-starter-netflix-eureka-client，会自动添加spring-cloud-starter-netflix-ribbon依赖-->
+```
+
+##### 4.3.2修改application.yml文件
+
+```yaml
+server:
+  port: 80
+
+eureka:
+  client:
+    register-with-eureka: false  #服务注册关闭
+    fetch-registry: true #服务发现开启
+    service-url:
+      defaultZone: http://eureka6001.com:6001/eureka,http://eureka6002.com:6002/eureka
+```
+
+##### 4.3.3修改自定义配置类ConfigBean
+
+```java 
+@Configuration
+public class ConfigBean {
+
+    //@LoadBalance作用1:开启RestTemplate负载均衡
+    //作用2:在调用服务提供者的接口时，可使用 服务名称 替代真实IP地址。 
+    @LoadBalanced
+    @Bean
+    public RestTemplate getRestTemplate(){
+        return new RestTemplate();
+    }
+}
+```
+
+##### 4.3.4修改消费者控制层ProductController_Consumer
+
+* 修改调用REST风格的服务提供者地址:
+
+```java
+@RestController
+public class ProductController_consumer {
+    private static final String REST_URL_PROFIX="http://MICROSERVICE-PRODUCT";
+```
+
+* 修改后完整版:
+
+```java
+@RestController
+public class ProductController_consumer {
+    private static final String REST_URL_PROFIX="http://MICROSERVICE-PRODUCT";
+
+    @Autowired
+    private RestTemplate restTemplate;
+
+    @RequestMapping("/consumer/product/get/{id}")
+    public Product getProduct(@PathVariable("id") Long id){
+        return restTemplate.getForObject(REST_URL_PROFIX + "/product/get/" + id, Product.class);
+    }
+
+    @RequestMapping("/consumer/product/list")
+    public List<Product> getProduct(){
+        return restTemplate.getForObject(REST_URL_PROFIX + "/product/list", List.class);
+    }
+
+    @RequestMapping("/consumer/product/add")
+    public boolean add(Product product){
+        return restTemplate.postForObject(REST_URL_PROFIX + "/product/add", product, boolean.class);
+    }
+
+}
+
+```
+
+##### 4.3.5修改主启动类
+
+在主启动类  MicroserviceProductConsumer_80 上添加注解  @EnableEurekaClient
+
+```java
+@EnableEurekaClient //标识为Eureka客户端
+@SpringBootApplication
+public class ProductConsumer_80 {
+    public static void main(String[] args) {
+        SpringApplication.run(ProductConsumer_80.class, args);
+    }
+}
+```
+
+###### 4.3.6功能测试
+
+```java
+1.启动两个Eureka集群后,再启动microservice-cloud-03-provider-product-8001注册进eureka集群中
+2.启动microservice-cloud-04-consumer-product-80从eureka中发现服务
+3.访问:http://localhost/consumer/product/list进行测试
+
+//总结:Ribbon 和 Eureka 整合后 ，消费者 Consumer 可以直接调用提供者服务，而不用再关心地址和端口号
+```
+
+#### 4.4Ribbon负载均衡实战
+
+```java
+总结:
+	将多个部署在不同服务器的相同的微服务注册进eureka服务,在本地测试用端口号作为区分模拟在不同的服务器场景.每个微服务可以有自己的数据库,但是服务名必须一致,这样才能做到负载均衡,服务调用者从负载均衡中根据算法(默认轮训算法)找到要调用的微服务进行调用.
+```
+
+##### 4.4.1Ribbon负载均衡架构
+
+```java
+Ribbon在工作时分为两步:
+1.先选择 Eureka Server ,它优先选择在同一个区域内负载较少的server
+2.再根据用户指定的策略，在从 Eureka Server 获取的服务注册列表中选择一个地址。 其中Ribbon提供了多种策略：比如轮询、随机和根据响应时间加权等。
+```
+
+![1577605140841](assets/1577605140841.png)
+
+##### 4.4.2新建一个商品提供者服务
+
+新建 microservice-cloud-06-provider-product-8002 ，参考： microservice-cloud-03-provider-product-8001
+
+```
+注意:
+1.pom文件和8001保持一致;
+2.新建数据库springcloud_db02,数据和springcloud_db01保持一致
+3.将mybatis配置和controller/service/mapper层复制
+4.配置application.yml,复制8001的,修改端口号和数据库名,注意服务名一定要和8001服务名保持一致(集群关键)
+5.配置启动类,复制8001的,修改类名
+```
+
+##### 4.4.3功能测试
+
+```java
+1.启动eureka集群;
+2.启动两个商品提供者微服务,并各自通过测试;
+3.启动商品消费者服务microservice-cloud-04-consumer-product-80
+4. 客户端通过 Ribbon 完成负载均衡并访问上一步的 Product 微服务
+http://localhost/consumer/product/list
+注意观察看到返回的数据库名字，各不相同，负载均衡实现
+```
+
+### 五 Feign客户端接口调用
+
+上一章讲述了如何通过RestTemplate+Ribbon去调用服务提供者.
+
+这一章主要讲述如何通过Feign去调用服务提供者;
+
+#### 5.1什么是Feign以及使用步骤
+
+```java
+1.什么是Feign?
+    Feign是Netflix公司开源的轻量级Rest客户端,使用Feign可以非常方便,简单的实现Http客户端.springcloud对Feign进行了封装,Feign默认集成了Ribbon实现了客户端负载均衡.
+2.Feign使用步骤:
+	1)引入spring-cloud-starter-openfeign依赖
+	2)启动类上注解@EnableFeignClients(basePackages = "com.fy.springcloud.rest")
+    3)编写接口,在接口类上注解@FeignClient("microservice-product"),接口方法的注解 请求参数 方法名 等都应该和被调用方法一致.
+```
+
+#### 5.2Feign实战操作
+
+##### 5.2.1创建Feign模块
+
+参考 microservice-cloud-04-consumer-product-80
+
+* 拷贝 microservice-cloud-04-consumer-product-80 中的 pom 依赖配置粘贴到 microservice-cloud-08-consumer-product-feign
+* 拷贝 application.yml 与 java类路径 下的所有文件到 microservice-cloud-08-consumer-product-feign
+* 拷贝与修改主启动类名：ProductConsumer_80_Feign
+
+##### 5.2.2配置pom.xml文件
+
+```xml
+<!--导入feign依赖-->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-openfeign</artifactId>
+        </dependency>
+```
+
+##### 5.2.3新建ProductClient接口
+
+```java
+@FeignClient("microservice-product")//标识其为feign接口,并告知所调用的服务名
+public interface ProductClient {
+
+    @RequestMapping(value = "/product/add", method = RequestMethod.POST)
+    boolean add(@RequestBody Product product);
+
+    @RequestMapping(value = "/product/get/{id}", method = RequestMethod.GET)
+    Product get(@PathVariable("id") Long id);
+
+    @RequestMapping(value = "/product/list", method = RequestMethod.GET)
+    List<Product> list();
+}
+
+//注意:接口方法中请求路径 注解 请求方式 方法名 入参等都和被调用方法保持一致;
+```
+
+##### 5.2.4启动类注解@EnableFeignClients
+
+```java 
+@EnableFeignClients(basePackages = "com.fy.springcloud.rest") //开启feign客户端并指定feign接口所在包,并生成此接口的代理对象
+@EnableEurekaClient //标识为Eureka客户端
+@SpringBootApplication
+public class ProductConsumer_feign {
+    public static void main(String[] args) {
+        SpringApplication.run(ProductConsumer_feign.class, args);
+    }
+}
+```
+
+##### 5.2.5创建ProductController_Feign
+
+```java 
+@RestController
+public class ProductController_consumer {
+	//将Feign客户端实例注入
+    @Autowired
+    ProductClient productClient;
+
+    @RequestMapping("/consumer/product/get/{id}")
+    public Product getProduct(@PathVariable("id") Long id){
+        return productClient.get(id);
+    }
+
+    @RequestMapping("/consumer/product/list")
+    public List<Product> getProduct(){
+        return productClient.list();
+    }
+
+    @RequestMapping("/consumer/product/add")
+    public boolean add(Product product){
+        return productClient.add(product);
+    }
+
+}
 ```
 
