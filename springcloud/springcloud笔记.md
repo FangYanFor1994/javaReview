@@ -1384,3 +1384,437 @@ public class ProductController_consumer {
 }
 ```
 
+##### 5.2.6功能测试
+
+```java
+1.启动两个eureka集群
+2.启动两个商品提供者8001/8002
+3.启动启动ProductConsumer_80_Feign
+4.访问:http://localhost/consumer/product/list
+  发现一样有负载均衡配置功能
+```
+
+#### 5.3Feign工作原理
+
+```properties
+Feign通过接口的方法调用Rest服务（之前是Ribbon+RestTemplate），请求发送给 Eureka 服务器（http://MICROSERVICE-PRODUCT/product/list）, 通过Feign直接找到服务接口 ，因为集成了 Ribbon 技术，Feign 自带负载均衡配置功能。
+1.启动类添加@EnableFeignClients注解，Spring会扫描标记了@FeignClient注解的接口，并生成此接口的代理对象
+2.@FeignClient("服务名称 ") 即指定了 product 服务名称，Feign会从Eureka注册中心获取 product 服务列表，并通过负载均衡算法进行服务调用。
+3.在接口方法中使用注解 @RequestMapping(value = "/product/list",method = RequestMethod.GET)，指定调用的url，Feign 会根据url进行远程调用。
+```
+
+#### 5.4Feign注意事项
+
+```properties
+SpringCloud对Feign进行了增强兼容了SpringMVC的注解 ，我们在使用SpringMVC的注解时需要注意：
+1.@FeignClient接口方法有基本类型参数在参数必须加@PathVariable("XXX") 或 @RequestParam("XXX")
+2.@FeignClient接口方法返回值为复杂对象时，此类型必须有无参构造方法.
+```
+
+### 六 Hystrix熔断器(断路器)
+
+#### 6.1什么是Hystrix
+
+##### 6.1.1分布式微服务架构面临的问题
+
+```
+在微服务架构中,根据业务来拆分成一个个的服务,而服务于服务之间存在着依赖关系(比如用户调用商品,商品调用库存,库存调用订单等等),在springcloud中多个微服务之间可以用RestTemplate+Ribbon或Feign来调用.
+```
+
+![1577619811901](assets/1577619811901.png)
+
+```java
+//雪崩效应
+在服务之间调用的链路上由于网络原因、资源繁忙或者自身的原因，服务并不能保证100%可用，如果单个服务出现问题，调用这个服务就会出现线程阻塞，导致响应时间过长或不可用，此时若有大量的请求涌入，容器的线程资源会被消耗完毕，导致服务瘫痪。服务与服务之间的依赖性，故障会传播，会对整个微服务系统造成灾难性的严重后果，这就是服务故障的“雪崩”效应。
+//为了解决这个问题,业界提出了熔断器模型;
+```
+
+##### 6.1.2Hystrix作用
+
+Hystrix 是Netflix公司开源项目( https://github.com/Netflix/Hystrix)，实现了熔断器模型，Spring Cloud 对这一组件进行了整合。
+服务熔断
+服务监控.....
+
+#### 6.2服务熔断
+
+##### 6.2.1什么是服务熔断
+
+熔断机制是应对雪崩效应的一种微服务链路保护机制。在微服务架构中，一个请求需要调用多个服务是非常常见的，如下图：
+
+![1577620056411](assets/1577620056411.png)
+
+当服务之间调用的链路上某个微服务不可用或者响应时间太长时，会导致连锁故障。当失败的调用到一定阈值（缺省是5秒内20次调用失败) 就会启动熔断机制。在 SpringCloud 框架里熔断机制通过Hystrix实现，Hystrix会监控微服务间调用的状况。熔断机制的注解是  @HystrixCommand
+
+![1577620105655](assets/1577620105655.png)
+
+熔断器打开后，可用避免连锁故障，fallback方法可以直接返回一个固定值。
+
+##### 6.2.2服务熔断实战
+
+```java
+商品提供者服务熔断步骤:
+1.修改提供者pom.xml文件,添加spring-cloud-starter-netflix-hystrix依赖;
+2.启动类添加@EnableHystrix注解,开启Hystrix熔断机制;
+3.修改ProductController,在出现异常的方法上添加@HystrixCommand(fallbackMethod="方法名")指定出现异常后调用的方法;
+```
+
+###### 6.2.2.1创建Hystrix模块
+
+新建microservice-cloud-08-provider-product-hystrix,直接复制microservice-cloud-03-provider-product-8001,相当于在此工程上添加Hystrix服务熔断机制
+
+###### 6.2.2.2配置pom.xml文件
+
+添加Hystrix依赖
+
+```xml
+<!--导入feign依赖-->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-openfeign</artifactId>
+        </dependency>
+```
+
+###### 6.2.2.3配置application.yml文件
+
+在实例名后面添加-hystrix以便于区分
+
+![1577622312613](assets/1577622312613.png)
+
+###### 6.2.2.4修改ProductController
+
+出现异常后如何处理？
+使用  @HystrixCommand 注解
+一旦调用服务方法失败并抛出了错误信息后，会自动调用  @HystrixCommand 注解中 fallbackMethod属性指定的当前类中的方法
+
+```java 
+@RestController
+public class ProductController {
+
+    @Autowired
+    private ProductService productService;
+
+    @RequestMapping(value = "/product/add", method = RequestMethod.POST)
+    public boolean add(@RequestBody Product product) {
+        return productService.add(product);
+    }
+
+    @HystrixCommand(fallbackMethod = "getFallback") //方法发生异常时会调用fallbackMethod指定的方法
+    @RequestMapping(value = "/product/get/{id}", method = RequestMethod.GET)
+    public Product get(@PathVariable("id") Long id) {
+        Product product = productService.get(id);
+        if(product == null){
+            throw new RuntimeException("id="+id+"无效");
+        }
+        return product;
+    }
+
+    @RequestMapping(value = "/product/list", method = RequestMethod.GET)
+    public List<Product> list() {
+        return productService.list();
+    }
+
+    public Product getFallback(@PathVariable("id") Long id){
+        return new Product(id, "id="+id+"无效--@HystrixCommand", "无有效数据库");
+    }
+
+}
+
+```
+
+###### 6.2.2.5修改启动类
+
+添加注解@EnableHystrix开启Hystrix熔断机制的支持
+
+```java
+@EnableHystrix //开启对熔断器的支持
+@EnableEurekaClient //标识该微服务为eureka客户端,将注册进eureka服务注册中心
+@MapperScan("com.fy.springcloud.mapper")
+@SpringBootApplication
+public class MicroserviceProductProvider_hystrix {
+    public static void main(String[] args) {
+        SpringApplication.run(MicroserviceProductProvider_hystrix.class,args);
+    }
+}
+```
+
+###### 6.2.2.6功能测试
+
+```java
+1.先启动2个eureka
+2.启动ProductProvider_Hystrix
+3.启动消费者microservice-cloud-08-consumer-product-feign
+4.访问http://localhost/consumer/product/get/-1
+```
+
+![1577622629525](assets/1577622629525.png)
+
+#### 6.3Feign客户端服务熔断
+
+```yaml
+步骤:
+1.
+#Feign是自带断路器的,也就是针对消费者(客户端)进行服务熔断,需要在配置文件中开启它,在配置文件中添加如下代码:
+
+feign:
+  hystrix:
+    enabled: true
+2.在FeignClient接口类上,@FeignClient添加fallback属性指定熔断后进入的类,该类实现@FeignClient标注的接口,重写接口方法;
+@FeignClient(value = "microservice-product", fallback = ProductClientHystrix.class)
+3.创建熔断类ProductClientHystrix实现接口重写方法;注意该类添加@Componet注解;
+```
+
+##### 6.3.1重构consumer-product-feign工程
+
+基于 microservice-cloud-07-consumer-product-feign 工程进行改造
+
+只要在已存在的  ProductClientService 接口上的  @FeignClient 注解中，加上  fallback 指定熔断处理类即可：  ProductClientServiceFallBack.class
+
+```java
+@FeignClient(value = "microservice-product", fallback = ProductClientHystrix.class)//标识其为feign接口,并告知所调用的服务名
+public interface ProductClient {
+
+    @RequestMapping(value = "/product/add", method = RequestMethod.POST)
+    boolean add(@RequestBody Product product);
+
+    @RequestMapping(value = "/product/get/{id}", method = RequestMethod.GET)
+    Product get(@PathVariable("id") Long id);
+
+    @RequestMapping(value = "/product/list", method = RequestMethod.GET)
+    List<Product> list();
+}
+
+```
+
+##### 6.3.2创建ProductClientServiceFallBack 类，并实现ProductClientService 接口
+
+创建 ProductClientServiceFallBack 类，并实现 ProductClientService 接口，
+注意使用 @Component 注解将它注入到容器中
+
+```java
+@Component
+public class ProductClientHystrix implements ProductClient{
+    @Override
+    public boolean add(Product product) {
+        return false;
+    }
+
+    @Override
+    public Product get(Long id) {
+        return new Product(id, "id="+id+"不存在--FeignClient&hystrix", "无数据库");
+    }
+
+    @Override
+    public List<Product> list() {
+        return null;
+    }
+}
+
+```
+
+##### 6.3.3修改yml文件
+
+在Feign中需要开启 Hystrix
+
+```yaml
+server:
+  port: 80
+
+eureka:
+  client:
+    register-with-eureka: false  #服务注册关闭
+    fetch-registry: true #服务发现开启
+    service-url:
+      defaultZone: http://eureka6001.com:6001/eureka,http://eureka6002.com:6002/eureka
+
+#Feign客户端熔断
+feign:
+  hystrix:
+    enabled: true
+
+```
+
+##### 6.3.4功能测试
+
+```java
+1.启动2个eureka
+2.启动服务提供者
+3.启动启动 microservice-cloud-08-consumer-product-feign
+4.正常访问测试http://localhost/consumer/product/get/2
+5.故意关闭服务提供者
+6.客户端自己代用提示如下图:
+```
+
+![1577632530574](assets/1577632530574.png)
+
+此时服务端 提供者 已经down了，但是我们做了服务熔断处理，让客户端在服务端不可用时，也会获得提示信息而不会挂起耗死服务器
+
+#### 6.4Hystrix Dashboard监控平台搭建
+
+##### 6.4.1服务监控实战
+
+###### 6.4.1.1搭建Hystrix Dashboard监控图形化服务
+
+```java
+步骤:
+1.创建microservice-cloud-09-hystrix-dashboard-9001 监控模块
+2.pom文件引入web/hystrix/hystrix-dashboard依赖
+3.yml文件配置端口号
+4.创建启动类,通过@EnableHystrixDashboard标识其为服务监控
+访问地址:http://localhost:9001/hystrix
+```
+
+pom.xml
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <parent>
+        <artifactId>microservice-cloud-01</artifactId>
+        <groupId>com.fy.springcloud</groupId>
+        <version>1.0-SNAPSHOT</version>
+        <relativePath>../microservice-cloud-01/pom.xml</relativePath>
+    </parent>
+    <modelVersion>4.0.0</modelVersion>
+
+    <artifactId>microservice-cloud-10-hystrix-dashboard-9001</artifactId>
+
+
+    <dependencies>
+        <dependency>
+            <groupId>com.fy.springcloud</groupId>
+            <artifactId>microservice-cloud-02-api</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <!--springboot web启动器-->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+
+        <!--导入hystrix和hystrix-dashboard依赖-->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-netflix-hystrix</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-netflix-hystrix-dashboard</artifactId>
+        </dependency>
+    </dependencies>
+
+</project>
+```
+
+application.yml
+
+```yaml
+server:
+  port: 9001
+```
+
+启动类
+
+```java
+@EnableHystrixDashboard //开启服务监控
+@SpringBootApplication
+public class HystrixDashboard_9001 {
+    public static void main(String[] args) {
+        SpringApplication.run(HystrixDashboard_9001.class, args);
+    }
+}
+```
+
+启动后访问http://localhost:9001/hystrix
+
+![1577637046682](assets/1577637046682.png)
+
+###### 6.4.1.2为要被监控的服务添加配置
+
+```java
+步骤:
+	1.在需要监控的服务 pom.xml 中的 dependencies 节点中新增 spring-boot-starter-actuator 监控依赖，以开启监控相关的端点，并确保已经引入断路器的依赖 spring-cloud-starter-netflix-hystrix
+	2.在需要监控的服务  application.yml 配制中添加暴露端点
+```
+
+被监控服务为:microservice-cloud-09-provider-product-hystrix
+
+pom.xml
+
+```xml
+<!--导入hystrix依赖-->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-netflix-hystrix</artifactId>
+        </dependency>
+        <!--监控依赖-->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+    </dependencies>
+```
+
+application.yml
+
+```yaml
+#在被监控服务上添加暴露端点
+management:
+  endpoints:
+    web:
+      exposure:
+        include: hystrix.stream
+```
+
+测试:
+
+```java
+1.启动监控服务： microservice-cloud-09-hystrix-dashboard-9001
+2.启动2个Eureka
+3.启动 microservice-cloud-09-provider-product-hystrix
+```
+
+访问：http://localhost:8001/actuator/hystrix.stream 看效果
+
+每隔2秒进行ping获取json格式数据（9001 监控 8001），但是阅读性不好，如果数据可以图形化显示效果就更完美
+
+![1577637412583](assets/1577637412583.png)
+
+图形化监控测试
+
+![1577637450396](assets/1577637450396.png)
+
+* 第一个输入框填写监控地址: http://localhost:8001/actuator/hystrix.stream
+
+* Delay：控制服务器上轮询监控信息的延迟时间，默认为2000毫秒，可以通过配置该属性来降低客\户端的网络和CPU消耗。
+
+* Title：可以通过配置该信息来展示更合适的标题，默认会使用具体监控实例的URL
+
+  
+
+监控结果
+
+* 如果没有请求会一直显示 “Loading…”
+* 这时访问一下 http://localhost:8001/product/get/1，可以看到出现了下面的效果：
+
+![1577637659956](assets/1577637659956.png)
+
+```
+如何查看监控页面
+7色 ：右上角
+1圈
+实心圆：共有两种含义。
+它通过颜色的变化代表了实例的健康程度，它的健康度从绿色<黄色<橙色<红色递减。
+该实心圆除了颜色的变化之外，它的大小也会根据实例的请求流量发生变化，流量越大该实心圆就越大。所以通过该实心圆的展示，就可以在大量的实例中快速的发现故障实例和高压力实例。
+1线
+曲线：用来记录2分钟内流量的相对变化，可以通过它来观察到流量的上升和下降趋势。
+整图说明如下:
+```
+
+![1577637709973](assets/1577637709973.png)
+
+被监控多个微服务效果图:
+
+![1577637745794](assets/1577637745794.png)
+
