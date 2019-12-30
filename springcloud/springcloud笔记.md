@@ -1818,3 +1818,195 @@ management:
 
 ![1577637745794](assets/1577637745794.png)
 
+### 七 Zuul路由网关
+
+#### 7.1什么是Zuul
+
+```java 
+1.Spring Cloud Zuul 是整合Netflix公司的 Zuul开源项目（官方：https://github.com/Netflix/zuul）；
+2.Zuul 包含了对请求路由和校验过滤两个最主要的功能：
+3.Zuul 和 Eureka 进行整合，将 Zuul 自身注册为 Eureka 服务治理中的服务，同时从 Eureka 中获得其他微服务的消息，也即以后的访问微服务都是通过Zuul跳转后获得。
+```
+
+#### 7.2Zuul路由功能实战
+
+```java
+//步骤:
+1.新建microservice-cloud-10-zuul-gateway-7001工程
+2.配置pom文件,引入web/eureka-client/zuul依赖
+3.配置application.yml,将该服务注册进eureka,并配置zuul路由相关配置
+4.启动类添加@EnableZuulProxy注解,标识其为zuul路由网关
+```
+
+##### 7.2.1新建microservice-cloud-10-zuul-gateway-7001
+
+##### 7.2.2配置pom.xml文件
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <parent>
+        <artifactId>microservice-cloud-01</artifactId>
+        <groupId>com.fy.springcloud</groupId>
+        <version>1.0-SNAPSHOT</version>
+        <relativePath>../microservice-cloud-01/pom.xml</relativePath>
+    </parent>
+    <modelVersion>4.0.0</modelVersion>
+
+    <artifactId>microservice-cloud-11-zuul-gateway-7001</artifactId>
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <!--zuul路由网关依赖-->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-netflix-zuul</artifactId>
+        </dependency>
+
+    </dependencies>
+
+</project>
+```
+
+##### 7.2.3配置appliance.yml文件
+
+```yaml
+server:
+  port: 7001
+
+spring:
+  application:
+    name: microservice-zuul-gateway
+
+eureka:
+  client:
+    register-with-eureka: true
+    fetch-registry: true
+    service-url:
+      defaultZone: http://eureka6001.com:6001/eureka,http://eureka6002.com:6002/eureka
+    instance:
+      instance-id: ${spring.application.name}:${server.port} #实例id,指定eureka页面服务状态显示
+      prefer-ip-address: true #指定鼠标悬停在实例id上显示ip地址
+      
+      
+#zuul路由配置
+zuul:
+  routes:
+    provider-product: # 路由名称，名称任意，路由名称唯一
+      path: /product/** #访问路径
+      serviceId: microservice-product #指定服务的id,会自动从eureka中找到该服务的ip和端口号
+      stripPrefix: false #代理转发时去掉前缀,false为不去掉前缀
+      
+   # 如果多个服务需要经过路由，则同povider-product方式继续添加，例如：
+  #provider-order:  
+     #path: /order/**
+     #serviceId: microservice-order
+     #stripPrefix: false
+
+```
+
+##### 7.2.4配置启动类
+
+```java
+@EnableZuulProxy  //开启zuul的功能
+@SpringBootApplication
+public class ZuulServer_7001 {
+    public static void main(String[] args) {
+        SpringApplication.run(ZuulServer_7001.class, args);
+    }
+}
+
+```
+
+##### 7.2.5测试zuul路由功能
+
+```java
+1.启动两个eureka集群
+2.启动商品提供者服务
+3.启动zuul服务
+4.访问:http://localhost:7001/product/get/1
+
+//说明:由于在zuul服务中配置了zuul.routes.**配置指定了路由对象的服务名,则zuul会从eureka中寻找该服务名对应的ip地址,因此我们只需要访问zuul的ip和端口会自动路由到目标服务的ip地址,加上请求路径就可以请求到具体的资源.
+```
+
+#### 7.3Zuul过滤器实战
+
+Zuul的核心就是过滤器,通过过滤器实现请求过滤,身份校验等.
+
+```java
+步骤:
+1.自定义过滤器要继承ZuulFilter,ZuulFilter是一个抽象类,需要重写它的4个抽象方法,如下:
+1)filterType:返回字符串代表过滤器的类型,返回值有:
+	pre:在请求路由之前执行
+	route:在请求路由时调用
+	post:请求路由之后调用
+	error:处理请求发生时调用
+2)filterOrder:返回整型数值,通过数据大小判断过滤器执行顺序,数值越小优先级越高
+3)shouldFilter:返回Boolean值,判断该过滤器是否执行
+4)run:过滤业务执行逻辑
+```
+
+```java
+//继承ZuulFilter的过滤器
+
+@Component
+public class LoginFilter extends ZuulFilter {
+    Logger logger = LoggerFactory.getLogger(this.getClass());
+    @Override
+    public String filterType() {
+        return "pre";
+    }
+
+    @Override
+    public int filterOrder() {
+        return 1;
+    }
+
+    @Override
+    public boolean shouldFilter() {
+        return true;
+    }
+
+    @Override
+    public Object run() throws ZuulException {
+        RequestContext context = RequestContext.getCurrentContext();
+        HttpServletRequest request = context.getRequest();
+        String token = request.getParameter("token");
+        if(token == "" || token == null){
+            logger.warn("此操作需要先登录系统...");
+            context.setSendZuulResponse(false);// 拒绝访问      
+            context.setResponseStatusCode(200);// 设置响应状态码
+            try {
+                //响应结果
+                context.getResponse().getWriter().write("token is empty");
+        } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+        logger.info("ok");
+        return null;
+    }
+}
+
+```
+
+**测试功能**
+
+1. 不带token访问:http://localhost:7001/product/get/1
+
+   ![1577726106026](assets/1577726106026.png)
+
+2. 带token参数访问:http://localhost:7001/product/get/1?token=123
+
+   ![1577726149555](assets/1577726149555.png)
+
+   带上token校验通过放行.
+
