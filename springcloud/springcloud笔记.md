@@ -2010,3 +2010,218 @@ public class LoginFilter extends ZuulFilter {
 
    带上token校验通过放行.
 
+### 八 spring cloud config分布式配置中心
+
+#### 8.1spring cloud config概述
+
+##### 8.1.1什么是spring cloud config
+
+```
+Spring Cloud Config 为微服务架构中的微服务提供 集中式的外部配置支持， 配置服务器为各个不同微服务应用的所有环境提供了一个中心化的外部配置
+```
+
+![1577805428241](assets/1577805428241.png)
+
+```java
+spring cloud config分为服务端和客户端两个部分
+1)服务端config server
+	也称为分布式配置中心，它是一个独立的微服务应用，用来连接配置服务器并为客户端提供获取配置信息，加密、解密信息等访问接口。
+	配置服务器官方推荐采用 Git 来存储配置信息，这样就有助于对环境配置进行版本管理，并且可通过Git客户端工具来方便的管理与访问配置信息。
+2)客户端config client
+	通过指定的服务端来管理服务的资源，以及与业务相关的配置内容，并在启动的时候从服务端获取和加载配置信息。
+```
+
+##### 8.1.2作用
+
+```java
+1)集中管理配置文件
+2)不同环境不同配置，动态化的配置更新，根据不同环境部署，如 dev/test/prod
+3)运行期间动态调整配置，不再需要在每个服务部署的机器上编写配置，服务会向配置中心统一拉取自已的配置信息
+4)当配置发生变动时，服务不需要重启即可感知到配置的变化并使用修改后的配置信息
+5)将配置信息以REST接口的形式暴露
+```
+
+##### 8.1.3与GitHub整合配置信息
+
+```java
+由于 Spring Cloud Config 官方推荐使用Git来管理配置文件（也可支持其他方式，如：SVN和本地文件），而且使用https/http访问的形式。
+```
+
+#### 8.2spring cloud config服务端配置
+
+##### 8.2.1创建配置文件提交到GitHub
+
+```yaml
+#在GitHub上创建仓库microservice-cloud-config,拉取到本地,添加配置文件microservice-config-application.yml,提交到远程仓库
+
+#注意：如果在记事本上编写，下面的缩进不要使用Tab来缩进，不然报错
+spring:
+  profiles:
+    active: dev #激活开发环境配置
+---
+server:
+  port: 4001 #端口号
+spring:
+  profiles: dev # 开发环境
+  application:
+    name: microservice-config-dev
+---
+server:
+  port: 4002 #端口号
+spring:
+  profiles: prod # 生产环境
+  application:
+    name: microservice-config-prod
+#保存时注意，选择 UTF-8 保存
+```
+
+##### 8.2.2新建config服务端模块(配置中心)
+
+```java
+//步骤:
+1.创建 microservice-cloud-11-config-server-5001 模块
+2.pom.xml文件添加web/config-server依赖
+3.appliance.yml文件添加端口号5001和服务名和git远程地址
+4.创建启动类添加@EnableConfigServer注解开启配置中心功能
+5.测试连接http://localhost:5001/microservice-config-application-dev.yml
+```
+
+###### 8.2.2.1创建microservice-cloud-11-config-server-5001 模块
+
+###### 8.2.2.2配置pom.xml文件
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <parent>
+        <artifactId>microservice-cloud-01</artifactId>
+        <groupId>com.fy.springcloud</groupId>
+        <version>1.0-SNAPSHOT</version>
+        <relativePath>../microservice-cloud-01/pom.xml</relativePath>
+    </parent>
+    <modelVersion>4.0.0</modelVersion>
+
+    <artifactId>microservice-cloud-12-config-server-5001</artifactId>
+
+    <dependencies>
+        <!--spring cloud config 中心配置依赖-->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-config-server</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+    </dependencies>
+
+</project>
+```
+
+###### 8.2.2.3配置application.yml文件
+
+```yaml
+server:
+  port: 5001
+spring:
+  application:
+    name: microservice-config
+  cloud:
+    config:
+      server:
+        git:
+          uri: https://github.com/FangYanFor1994/microservice-cloud-config.git
+```
+
+###### 8.2.2.4创建启动类添加注解@EnableConfigServer
+
+```java 
+@EnableConfigServer //开启配置中心功能
+@SpringBootApplication
+public class Configserver_5001 {
+    public static void main(String[] args) {
+        SpringApplication.run(Configserver_5001.class, args);
+    }
+}
+
+```
+
+###### 8.2.2.5配置读取规则
+
+```java
+/{application}-{profile}.yml
+/读取的配置文件名-环境配置项     （默认为master分支）
+如：http://localhost:5001/microservice-config-application-dev.yml
+/{application}/{profile}[/{label}] 
+/读取的配置文件名/环境配置项/分支名
+如：http://localhost:5001/microservice-config-application/dev/master
+/{label}/{application}-{profile}.yml
+/分支名/读取的配置文件名/环境配置项
+如：http://localhost:5001/master/microservice-config-application-dev.yml
+```
+
+###### 8.2.2.6测试config配置中心是否可以从GitHub上获取配置信息
+
+1. 启动config配置中心服务5001
+2. 访问测试配置(dev):http://localhost:5001/microservice-config-application-dev.yml
+
+![1577806449623](assets/1577806449623.png)
+
+#### 8.4spring cloud config客户端服务
+
+```java
+//步骤
+1.新建microservice-cloud-12-config-client-8080模块
+2.pom.xml文件引入config/web依赖
+3.配置bootstrap.yml文件,其优先级高于application.yml,配置内容为配置中心的连接信息
+4.创建启动类,启动后看日志信息使用的端口是4001则说明从远程获取配置信息成功.
+```
+
+##### 8.4.1新建config客户端模块microservice-cloud-12-config-client-8080
+
+##### 8.4.2pom.xml文件配置
+
+```xml
+
+    <dependencies>
+        <!--引入config客户端依赖-->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-config</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+    </dependencies>
+```
+
+##### 8.4.3配置bootstrap.yml文件
+
+```yaml
+spring:
+  cloud:
+    config:
+      name: microservice-config-application #GitHub上的配置名称,注意没有yml后缀
+      profile: prod
+      label: master
+      uri: http://localhost:5001 #Config配置中心地址，通过它获取microservice-config-application.yml配置信息
+```
+
+##### 8.4.4创建启动类,不需要单独的注解
+
+```java
+@SpringBootApplication
+public class ConfigClient_8080 {
+    public static void main(String[] args) {
+        SpringApplication.run(ConfigClient_8080.class, args);
+    }
+}
+```
+
+##### 8.4.5功能测试
+
+先启动config配置中心服务,再启动config-server-5001,看日志输出的使用端口号为远程配置文件中激活的配置中的端口号;
