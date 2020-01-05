@@ -2134,6 +2134,10 @@ spring:
       server:
         git:
           uri: https://github.com/FangYanFor1994/microservice-cloud-config.git
+          #如果显示连接不上,添加如下内容
+          username: FangYanFor1994
+          password: fangyan1994!
+          skip-ssl-validation: true
 ```
 
 ###### 8.2.2.4创建启动类添加注解@EnableConfigServer
@@ -2225,3 +2229,324 @@ public class ConfigClient_8080 {
 ##### 8.4.5功能测试
 
 先启动config配置中心服务,再启动config-server-5001,看日志输出的使用端口号为远程配置文件中激活的配置中的端口号;
+
+#### 8.5Spring Cloud Config配置实战
+
+##### 8.5.1需求分析
+
+```java
+将创建一个Eureka服务与Product商品提供者服务，它们两个微服务的配置信息均从GitHub获取 ，从而实现统一配置分布式管理，完成多环境的变量。
+
+//步骤
+1.创建eureka server模块,将配置文件microservice-config-eureka.yml提交到GitHub上,在bootstrap.yml配置要访问的配置中心服务地址和label和配置文件名(不加yml后缀)和profiles;
+2.创建product模块,将配置文件microservice-config-product.yml提交到GitHub上,在bootstrap.yml配置要访问的配置中心服务地址和label和配合文件名(不加yml后缀)和profiles;
+3.启动配置中心服务,再启动eureka服务和product服务,发现product服务成功注册到eureka服务,且能正常访问资源,证明GitHub上的配置生效;
+```
+
+##### 8.5.2需求实战步骤
+
+###### 8.5.2.1编辑Eureka配置和product配置并提交到远程仓库
+
+```yaml
+#eureka server
+#注意：如果在记事本上编写，下面的缩进不要使用Tab来缩进，不然报错
+spring:
+  profiles:
+    active: dev # 激活开发环境配置
+---
+server:
+  port: 6001 #端口号
+spring:
+  profiles: dev # 开发环境
+  application:
+    name: microservice-config-eureka
+   
+eureka:
+  instance:
+    hostname: eureka6001.com
+  client:
+    registerWithEureka: false
+    fetchRegistry: false
+    serviceUrl:
+      defaultZone: http://eureka6001.com:6001/eureka/
+  server:
+  enable-self-preservation: false # 禁用自我保护机制*****************
+---
+server:
+  port: 6001 #端口号
+spring:
+  profiles: prod # 生产环境
+  application:
+    name: microservice-config-eureka
+eureka:
+  instance:
+    hostname: eureka6001.com
+  client:
+    registerWithEureka: false
+    fetchRegistry: false
+    serviceUrl:
+      defaultZone: http://eureka6001.com:6001/eureka/
+  server:
+    enable-self-preservation: true # 开启自我保护机制*****************
+   
+#保存时注意，选择 UTF-8 保存
+```
+
+```yaml
+#product
+#注意：如果在记事本上编写，下面的缩进不要使用Tab来缩进，不然报错
+spring:
+  profiles:
+    active: dev # 激活开发环境配置
+---
+server:
+  port: 8001
+mybatis:
+  config-location: classpath:mybatis/mybatis.cfg.xml
+  type-aliases-package: com.mengxuegu.springcloud.entities
+  mapper-locations: classpath:mybatis/mapper/**/*.xml
+spring:
+  profiles: dev # 开发环境
+  application:
+    name: microservice-product-config # ******服务名*******
+  datasource:
+    type: com.alibaba.druid.pool.DruidDataSource
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://127.0.0.1:3306/springcloud_db01?serverTimezone=GMT%2B8 #数据库连接地址，*****注意库名 db01***************
+    username: root
+    password: root
+    dbcp2:
+      min-idle: 5
+      initial-size: 5
+      max-total: 5
+      max-wait-millis: 150
+eureka:
+  client:
+    registerWithEureka: true
+    fetchRegistry: true
+    serviceUrl:
+      defaultZone: http://eureka6001.com:6001/eureka
+  instance:
+    instanceId: ${spring.application.name}:${server.port}
+    prefer-ip-address: true
+---
+server:
+  port: 8001
+mybatis:
+  config-location: classpath:mybatis/mybatis.cfg.xml
+  type-aliases-package: com.mengxuegu.springcloud.entities
+  mapper-locations: classpath:mybatis/mapper/**/*.xml
+spring:
+  profiles: dev # 开发环境
+  application:
+    name: microservice-product-config # ******服务名*******
+  datasource:
+    type: com.alibaba.druid.pool.DruidDataSource
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://127.0.0.1:3306/springcloud_db02?serverTimezone=GMT%2B8 #数据库连接地址，*****注意库名 db01***************
+    username: root
+    password: root
+    dbcp2:
+      min-idle: 5
+      initial-size: 5
+      max-total: 5
+      max-wait-millis: 150
+eureka:
+  client:
+    registerWithEureka: true
+    fetchRegistry: true
+    serviceUrl:
+      defaultZone: http://eureka6001.com:6001/eureka
+  instance:
+    instanceId: ${spring.application.name}:${server.port}
+    prefer-ip-address: true
+```
+
+###### 8.5.2.2构建config版eureka服务端
+
+1. 新建模块 microservice-cloud-13-eureka-config-6001
+2. 配置 pom.xml 文件
+
+```xml
+<dependencies>
+        <!--spring cloud config 依赖-->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-config</artifactId>
+        </dependency>
+        <!--eureka服务端依赖-->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-netflix-eureka-server</artifactId>
+        </dependency>
+    </dependencies>
+```
+
+3. 在resources 目录下创建并配置 bootstrap.yml 文件
+
+```yaml
+spring:
+  cloud:
+    config:
+      name: microservice-config-eureka #github上的配置名称，注意没有yml后缀名
+      profile: dev  #本次访问的环境配置项
+      label: master #远程库的分支名
+      uri: http://localhost:5001 #Config配置中心地址，通过它获取microservice-config-eureka.yml配置信息
+```
+
+4. 创建启动类 EurekaServer_Config_6001标识注解：@EnableEurekaServer
+
+   ```java 
+   @EnableEurekaServer
+   @SpringBootApplication
+   public class EurekaServer_config {
+   
+       public static void main(String[] args) {
+           SpringApplication.run(EurekaServer_config.class, args);
+       }
+   }
+   ```
+
+5. 功能测试
+
+```java
+1.先启动config配置中心:microservice-cloud-11-config-server-5001
+2.再启动Eureka 注册中心: microservice-cloud-13-eureka-config-6001
+3.访问：http://eureka6001.com:6001/
+根据 bootstrap.yml 文件中的 profile: dev, 所以是禁止了自我保护机制
+```
+
+![1577892587980](assets/1577892587980.png)
+
+product服务测试和上述一致;
+
+### 九 Spring Cloud Bus消息总线
+
+```java
+在springcloud config中,如果我们修改GitHub上的配置文件内容后,如果不重启config客户端怎么能让配置生效呢?
+    可以通过springcloud Bus来实现配置的自动更新.
+```
+
+#### 9.1spring cloud Bus使用机制
+
+![1578230679968](assets/1578230679968.png)
+
+```java
+//springcloud Bus做配置更新的步骤
+1.提交配置后发送post方式的/bus-refresh请求给Config客户端;
+2.Config客户端接收到请求从Server端更新配置并且发送消息给消息总线;
+3.消息总线接收到消息并通知给其他客户端;
+4.其他客户端接收到通知,请求server端获取最新配置;
+5.全部客户端均获取到最新的配置;
+```
+
+#### 9.2springcloud Bus实战
+
+```java
+//步骤:
+1.安装rabbitmq,用rabbitmq进行传播消息;
+2.在config客户端microservice-cloud-15-product-config-8001添加依赖bus-amqp/actuator
+3.在bootstrap.properties中添加配置内容rabbitmq的配置和暴露触发消息总线地址的配置.
+4.测试:修改GitHub上的config客户端的服务名配置,然后访问触发消息总线的地址:http://localhost:8001/actuator/bus-refresh 使所有的config客户端从config server端更新配置.  然后访问eureka,查看注册进去的服务名变为修改之后的服务名;
+```
+
+**1.修改 microservice-cloud-14-product-config-8001的pom.xml文件**
+
+```xml
+<!--Bus 与 rabbitMQ依赖-->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-bus-amqp</artifactId>
+        </dependency>
+        <!--监听器-->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+```
+
+**2.在bootstrap.yml中添加配置**
+
+```yaml
+spring:
+  cloud:
+    config:
+      name: microservice-config-product
+      profile: dev
+      label: master
+      uri: http://localhost:5001
+#  rabbitmq配置(默认配置)
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: guest
+    password: guest
+# 暴露触发消息总线的地址
+management:
+  endpoints:
+    web:
+      exposure:
+        include: bus-refresh
+```
+
+**3.功能测试**
+
+```java
+1.首先启动Config服务端：microservice-cloud-11-config-server-5001
+2.依次启动Eureka服务端：microservice-cloud-13-eureka-config-6001
+3.最后启动Product提供者服务：microservice-cloud-14-product-config-8001
+4.访问Eureka管理页面: http://eureka6001.com:6001/ 显示服务名是 microservice-product-config
+5.修改GitHub上的  microservice-config-product.yml 配置文件，将 profile: dev (开发环境) 的 服务名 改为microservice-product-config-bus
+6.使用 postman工具发送 POST 请求: http://localhost:8001/actuator/bus-refresh发送请求后，会向 rabbitmq 队列发送数据，就会被监听到进行更新服务配置信息
+7.再次访问 http://eureka6001.com:6001/ ，发现服务名变为 microservice-product-config-bus
+```
+
+#### 9.3自定义类中读取配置文件
+
+```java
+//总结:在类上添加@RefreshScope注解
+问:如果在controller中某个属性需要获取配置中信息,但是这个配置信息修改了之后,即使使用消息总线地址 http://localhost:8001/actuator/bus-refresh重新获取配置,但是该修改的信息还是不能更新到controller属性上?
+    答:在controller类上添加@RefreshScope注解就能解决;(原因可能是controller是通过spring的控制反转由spring来管理的bean,在服务启动时就由spring创建由spring容器来管理,只是修改配置文件的话,该bean内的属性不会改变,所以使用@RefreshScope来让该controller更新)
+```
+
+#### 9.4刷新Druid数据源配置实战
+
+```java
+//总结:如果使用springboot默认的数据源,配置文件更新后发送http://localhost:8001/actuator/bus-refresh即可更新到数据源属性中,但是如果使用Druid作为数据源的话更新后的配置信息不会自动更新到数据源属性中;自定义配置类重新将DruidDataSource注册进spring容器,并在@Bean上添加@RefreshScope注解;
+
+如下:
+//一定不要在此类加@RefreshScope，不然报错
+@Configuration //不要少了
+public class DruidConfig {
+  @RefreshScope //刷新数据源
+  @ConfigurationProperties(prefix = "spring.datasource") //绑定数据源配置
+  @Bean
+  public DataSource druid() {
+    return new DruidDataSource();
+ }
+}
+
+//总结：发送post请求 http://localhost:8001/actuator/bus-refresh刷新后，服务器不用重启，新的数据源就会生效。
+```
+
+### 十 springcloud常见面试题
+
+```java
+1.你在项目中使用springcloud的哪些组件?
+    答:服务注册组件Eureka、服务发现组件Feign、负载均衡Ribben、熔断器Hystrix、路由网关Zuul、分布式配置管理Spring Cloud Config、消息总线Spring Cloud Bus
+
+2.解释雪崩效应，为什么使用熔断器？
+	1）在服务之间调用的链路上由于网络原因、资源繁忙或者自身的原因，服务并不能保证100%可用，如果单个服务出现问题，调用这个服务就会出现线程阻塞，导致响应时间过长或不可用，此时若用大量的请求涌入，容器的线程资源会被消耗完毕，导致服务瘫痪。 服务与服务之间的依赖性，故障会传播，会对整个微服务系统造成灾难性的严重后果，这就是服务故障的雪崩效应。
+	2）熔断器就是解决雪崩效应的。
+	
+3.为什么使用路由网关？
+	答：1）作为分布式架构中调用微服务的统一入口，方便前端调用；
+		2）集中处理权限问题。（过滤器）
+		
+4.为什么使用集中配置管理（Spring Cloud Config）
+	答：将配置文件放到云端进行集中式管理，方便后期维护；
+	
+5.为什么使用消息总线？
+	答：可以在不重启微服务的情况下，更新配置文件，让其立刻生效；
+```
+
