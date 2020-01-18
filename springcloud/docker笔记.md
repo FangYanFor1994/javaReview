@@ -223,3 +223,229 @@ yum install docker-ce
 * 查看docker概要信息： docker info
 
 ![1578839463330](assets/1578839463330.png)
+
+### 四、docker镜像操作
+
+```
+Docker镜像是由文件系统叠加而成（是一种文件的存储形式）。最底端是一个文件引导系统，即bootfs，这
+很像典型的Linux/Unix的引导文件系统。Docker用户几乎永远不会和引导系统有什么交互。实际上，当一个
+容器启动后，它将会被移动到内存中，而引导文件系统则会被卸载，以留出更多的内存供磁盘镜像使用。
+Docker容器启动是需要的一些文件，而这些文件就可以称为Docker镜像。
+```
+
+![1579359800215](assets/1579359800215.png)
+
+#### 4.1列出镜像
+
+docker官网镜像搜索：https://hub.docker.com/
+
+```properties
+1.显示所有已下载的镜像
+# docker images
+2.只显示镜像id
+# docker images -q
+
+#说明
+1.这些镜像都是存放在宿主机的 /var/lib/docker目录下
+2.为了区分同一个仓库下的不同镜像，Docker提供了一种称为标签（TAG）的功能，此功能使得同一仓库中存放多个相同的镜像（不同版本号即tag）
+3.我们可以使用仓库名后面加上一个冒号和标签名 ( REPOSITORY:TAG ) 来指定该仓库中的某一具体的镜像，
+如果未指定镜像的标签，将下载lastest最新版本
+```
+
+![1579359998687](assets/1579359998687.png)
+
+![1579360155643](assets/1579360155643.png)
+
+#### 4.2搜索镜像
+
+```properties
+1.搜索网络中的镜像
+# docker search [OPTIONS] 镜像名称
+
+2.options选项说明
+-s 列出关注数大于指定值的镜像
+# docker search -s 100 centos
+--no-trunc 显示完整的镜像描述DESCRIPTION
+# docker search --no-trunc centos
+```
+
+#### 4.3拉取镜像
+
+```properties
+# docker pull 镜像名:标签名
+例如拉取mysql:5.6版本镜像
+# docker pull mysql:5.6
+```
+
+由于官方镜像库在国外，拉取太慢或者拉取失败，因此需要配置国内镜像加速器
+
+##### 4.3.1配置阿里云镜像
+
+1. 阿里云镜像加速器地址
+
+![1579360860766](assets/1579360860766.png)
+
+2. 通过修改daemon配置文件/etc/docker/daemon.json来使用加速器,如果不存在则手动创建
+
+   ```properties
+   # vim /etc/docker/daemon.json
+   ```
+
+3. 文件加入以下内容
+
+```properties
+{
+ "registry-mirrors": ["https://fhfqlvbu.mirror.aliyuncs.com"]
+}
+```
+
+4. 一定要重启docker服务，如果重启docker后无法加速，可以重新启动CentOS
+
+```properties
+# 重载此配置文件
+systemctl daemon-reload
+# 重启 docker
+systemctl restart docker
+```
+
+再通过 docker pull 命令下载镜像：速度杠杠的
+
+```properties
+# docker pull mysql
+```
+
+#### 4.4删除镜像
+
+```properties
+删除某一个镜像
+# docker rmi 镜像ID
+删除所有镜像 (是 `` 反单引号 )  其中  docker images -q 获取所有镜像id
+# docker rmi `docker images -q`
+```
+
+### 五、docker容器操作
+
+#### 5.1查看容器
+
+```properties
+1.查看正在运行的容器
+# docker ps
+2.查看所有的容器（运行与未运行的）
+# docker ps -a
+3.查看最后一次运行的容器
+# docker ps -l
+4.查看停止的容器
+# docker ps -f status=exited
+```
+
+#### 5.2创建与启动容器
+
+**创建容器命令**
+
+```properties
+# docker run [options] 镜像名：标签名
+创建容器  [OPTIONS] 常用的参数说明：
+-i 表示交互式运行容器（就是创建容器后，马上会启动容器，并进入容器 ），通常与 -t 同时使用 。
+-t 启动后会进入其容器命令行, 通常与  -i 同时使用; 加入  -it 两个参数后，容器创建就能登录进去。即
+分配一个伪终端。
+--name 为创建的容器指定一个名称 。
+-d 创建一个守护式容器在后台运行，并返回容器ID；
+这样创建容器后不会自动登录容器，如果加 -i 参数，创建后就会运行容器。
+-v 表示目录映射, 格式为： -p 宿主机目录:容器目录
+注意：最好做目录映射，在宿主机上做修改，然后共享到容器上。
+-p 表示端口映射，格式为： -p 宿主机端口:容器端口
+
+1. 创建一个交互式容器（创建后立刻启动并进入容器）并取名为  mycentos , (  /bin/bash 是linux中的命令解析器,会进入到容器里面命令行)
+# docker run -it --name=mycentos centos:7 /bin/bash
+同一个镜像可运行多个容器
+```
+
+#### 5.3退出容器
+
+```properties
+注意：退出容器指在容器内部操作的命令
+1.退出并停止当前容器(如果是以守护容器执行exit，则只退出不停止)
+# exit
+2.退出不停止当前容器
+键盘：ctr+q+p   需要按两次即可退出
+```
+
+#### 5.4启动与停止容器
+
+```properties
+1.启动已运行过的容器
+# docker start 容器名|容器id
+2.启动所有运行过的容器
+# docker start `docker ps -a -q`
+3.停止正在运行的容器
+# docker stop 容器名|容器id
+4.停止所有正在运行的容器
+# docker stop `docker ps -a -q`
+5.强制停止正在运行的容器
+# docker kill 容器名|容器id
+6.强制停止所有正在运行的容器
+# docker kill `docker ps -a -q`
+```
+
+#### 5.5创建守护式容器
+
+```properties
+# docker run -id --name=mycentos2 centos:7
+-i 运行容器
+-d 创建守护式容器
+```
+
+#### 5.6登录容器
+
+```properties
+# docker exec -it 容器名称|容器id /bin/bash
+
+说明：以docker exec登录的容器，执行exit命令只会退出容器  不会停止容器
+```
+
+#### 5.7拷贝宿主机与容器中的文件
+
+```properties
+1.拷贝宿主机中的文件到容器中 (容器必须是启动的)
+# docker cp 要拷贝的宿主机文件或目录 容器名称:容器文件或目录
+例：docker cp /opt/fangyan mycentos2:/opt  （将宿主机/opt下的fangyan文件拷贝到mycentos2容器的/opt目录下）
+2.从容器内文件拷贝到宿主机
+# docker cp 容器名称:要拷贝的容器文件或目录 宿主机文件或目录
+
+注意：文件拷贝docker cp 命令均在宿主机中操作
+```
+
+#### 5.8数据目录挂载
+
+```properties
+# docker run -id -v /宿主机绝对路径目录:/容器内目录 --name=容器名  镜像名：标签名
+例：docker run -id -v /opt:/opt --name=mycentos3 centos:7
+说明：根据centos：7创建（-d）并运行（-i）一个守护式容器mycentos3，并且宿主机的/opt目录和容器的/opt目录做映射，此时修改宿主机或者容器内的/opt下内容，都将会映射到对应的容器或宿主机/opt目录下，保持同步。
+
+# docker run -id -v /宿主机绝对路径目录:/容器内目录:ro --name=容器名  镜像名：标签名
+说明：在映射目录后加 ：ro  即可实现目录挂载只读（Read-Only）权限。
+```
+
+#### 5.9看容器内部细节
+
+```properties
+# docker inspect mycentos2
+```
+
+![1579370901307](assets/1579370901307.png)
+
+#### 5.10查看容器ip地址
+
+```properties
+# docker inspect --format='{{.NetworkSettings.IPAddress}}' mycentos2
+```
+
+#### 5.12删除容器
+
+```properties
+1.删除指定容器
+# docker rm 容器名称 | 容器ID
+2.删除所有容器（其中运行中的容器无法删除，所以先停再删）
+# docker rm `docker ps -a -q`
+```
+
