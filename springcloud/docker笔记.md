@@ -449,3 +449,194 @@ systemctl restart docker
 # docker rm `docker ps -a -q`
 ```
 
+### 六、docker部署应用实战
+
+#### 6.1MySQL部署
+
+```properties
+1.拉取MySQL镜像
+# docker pull mysql:5.7
+2.创建MySQL容器
+# docker run -id --name=mysql -p 33306:3306 -e MYSQL_ROOT_PASSWORD=123456 mysql:5.7
+ 说明：1）-p 代表端口映射，格式为 宿主机映射端口：容器运行端口
+ 	  2）-e 代表添加环境变量，MYSQL_ROOT_PASSWORD是root用户的登录密码
+ 	  容器启动后即可通过MySQL客户端登录，注意Windows不能直接访问容器，要通过宿主机映射端口访问
+3.进入MySQL容器，登录MySQL
+# docker exec -it mysql bin/bash
+# mysql -u root -p 
+```
+
+#### 6.2redis部署
+
+```properties
+1.拉取redis镜像
+# docker pull redis
+2.创建redis容器
+# docker run -id --name=redis -p 6379:6379 redis
+```
+
+#### 6.3tomcat部署
+
+```properties
+1.拉取tomcat镜像
+# docker pull tomcat:8
+2.创建tomcat容器用于web应用，并进行目录映射
+# docker run -id --name=mxg_tomcat -p 8888:8080 -v /usr/local/project:/usr/local/tomcat/webapps --
+  privileged=true tomcat:8
+  说明：-p表示端口号映射   -v表示目录映射   --privileged=true如果映射的是多级目录，防止出现没有权限的问题
+  
+3.进入tomcat容器
+# docker exec -it tomcat /bin/bash
+```
+
+**在tomcat部署web应用**
+
+```properties
+将 Web应用系统 的发布源码，放到宿主机的 /usr/local/project 目录下，它会自动同步到tomcat容器中的
+webapp目录
+
+1.在宿主机的/usr/local/project 目录下创建fangyan目录，往里增加一个hello.html文件
+[root@MiWiFi-R4A-srv project]# mkdir fangyan
+[root@MiWiFi-R4A-srv project]# cd fangyan/
+[root@MiWiFi-R4A-srv fangyan]# echo helloWorld > hello.html
+
+2.进入tomcat容器查看是否已同步
+[root@MiWiFi-R4A-srv fangyan]# docker exec -it tomcat /bin/bash
+root@35a6f9f96e1e:/usr/local/tomcat# cat webapps/fangyan/hello.html 
+helloWorld
+
+3.测试，
+http://192.168.31.71:8888/fangyan/hello.html
+说明:webapps下面每一个文件夹是一个web项目，文件夹名称就是项目名称，如fangyan
+```
+
+![1579447872864](assets/1579447872864.png)
+
+#### 6.4rabbitmq部署
+
+1.拉取rabbitmq镜像
+
+```properties
+# docker pull rabbitmq:management
+注意：如果docker pull rabbitmq 后面不带management，启动rabbitmq后是无法打开管理界面的，所以我们要
+下载带management插件的rabbitmq.
+```
+
+2.创建rabbitmq容器
+
+```properties
+方式一：创建镜像（默认用户名密码）,远程连接端口5672，管理系统访问端口15672，默认用户名： guest ，密码
+也是  guest
+# docker run -id --name=mxg_rabbitmq -p 5672:5672 -p 15672:15672 rabbitmq:management
+
+方式二：启动镜像（设置用户名密码）
+docker run -id --name=mxg_rabbitmq2 -e RABBITMQ_DEFAULT_USER=username -e
+RABBITMQ_DEFAULT_PASS=password -p 5672:5672 -p 15672:15672 rabbitmq:management
+```
+
+3.访问rabbitmq管理界面
+
+访问管理界面的地址是 http://[宿主机IP]:15672 , 如：http://192.168.10.11:15672，默认 guest 用户，密码
+也是 guest。
+
+### 七、备份与迁移
+
+#### 7.1容器保存为镜像
+
+通过以下命令将容器保存为镜像
+
+```properties
+# docker commit [-m="提交的描述信息"] [-a="创建者"] 容器名称|容器ID 生成的镜像名[:标签名]
+```
+
+##### 7.1.1无目录挂载-容器保存为镜像
+
+```properties
+查看是否有挂载目录
+# docker inspect --format='{{.Mounts}}' 容器名
+```
+
+![1579451884368](assets/1579451884368.png)
+
+```properties
+mycentos2 容器无数据目录挂载，保存为镜像方式如下：
+# docker commit mycentos2 mycentos_new:1.1
+说明： mycentos2是容器名称   mycentos_new是生成的镜像名称  1.1是生成的镜像标签
+```
+
+##### 7.1.2有目录挂载-容器保存为镜像
+
+```properties
+问题： 如果Docker对容器挂载了数据目录, 在将容器保存为镜像时，数据不会被保存到镜像中。
+
+原因：因为宿主机与容器做了路径映射，再commit一个新的镜像时，该路径下的所有数据都会被抛弃，不会
+被保存到新镜像中。可通过  docker inspect --format='{{.Mounts}}' 镜像名 查看是否有目录挂载.
+
+解决：
+1）目录挂载方法。先把在宿主机的数据备份在某个目录下，在  docker run 的时候使用-v参数将宿主机上的
+目录映射到容器里的目标路径中（tomcat是  /usr/local/tomcat/webapps ，mysql是 var/lib/mysql ）
+2）拷贝方法。先把在宿主机的数据备份在某个目录下，通过拷贝的方法  docker cp 将备份的数据复制进容
+器里的目标路径中（tomcat是  /usr/local/tomcat/webapps ，mysql是 var/lib/mysql ）。
+#拷贝方法说明：挂载的目录在保存为镜像时会丢失，拷贝到容器的目录在保存为镜像时不会丢失
+```
+
+###### 7.1.2.1tomcat保存为镜像实战操作（目录挂载方法）
+
+1. 查看目录保存位置
+
+   ```properties
+   # docker inspect --format='{{.Mounts}}' mxg_tomcat
+   ```
+
+   ![1579452343006](assets/1579452343006.png)
+
+```properties
+2.宿主机数据保存在 /usr/local/project , 将此路径数据备份在 baseproject (如果后面镜像是提供给别人, 则此备
+份的数据也同时提供)
+# cp -rf /usr/local/project/ /usr/local/baseproject
+3.mxg_tomcat 容器保存为镜像
+# docker commit mxg_tomcat tomcat_new:1
+4.采用 目录挂载方法 创建容器，目录挂载时，宿主机的路径指定为备份数据目录可还原数据
+# docker run -id --name=mxg_tomcat_new -p 8081:8080 -v /usr/local/baseproject:/usr/local/tomcat/webapps --privileged=true tomcat_new:1
+```
+
+###### 7.1.2.2MySQL保存为镜像实战操作（拷贝方法）
+
+```properties
+1.查看数据保存位置
+# docker inspect --format='{{.Mounts}}' mxg_mysql
+```
+
+![1579453039919](assets/1579453039919.png)
+
+```properties
+2.将此路径数据备份在 /mysql (如果后面镜像是提供给别人, 则此备份的数据也同时提供)
+# cp -rf /var/lib/docker/volumes/c4ecc0d59c96bfea03428a799a7a63d6f5c0102a8c17a393f53ef11d3a0accc5/_data /mysql
+3.mxg_mysql 容器保存为镜像
+# docker commit mxg_mysql mysql_new:1
+4.通过上面保存的镜像创建容器
+# docker run -id --name=mxg_mysql_new -p 3306:3306 -e MYSQL_ROOT_PASSWORD=123456 mysql_new:1
+5.采用 拷贝方法 进行还原数据， 容器中的数据目录为： /var/lib/mysql
+# docker cp /mysql/ mxg_mysql_new:/var/lib/
+6.重启MySQL才能生效，不然会报错
+# docker restart mxg_mysql_new
+```
+
+#### 7.2镜像备份
+
+```properties
+# docker save -o mycentos.tar mycentos_new:1.1
+说明：-o 指定输出到的文件
+```
+
+![1579453451890](assets/1579453451890.png)
+
+#### 7.3镜像恢复与迁移
+
+```properties
+1.首先我们先删除掉 mycentos_new:1.1 镜像(注意先停止并删除所有引用了的容器)
+# docker rmi mycentos_new:1.1
+2.然后执行此命令进行恢复  mycentos_new:1.1 镜像
+# docker load -i mycentos.tar
+```
+
