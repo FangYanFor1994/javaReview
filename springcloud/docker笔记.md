@@ -1,4 +1,4 @@
-一 、docker简介
+### 一 、docker简介
 
 #### 1.1docker能解决什么问题
 
@@ -640,3 +640,94 @@ mycentos2 容器无数据目录挂载，保存为镜像方式如下：
 # docker load -i mycentos.tar
 ```
 
+### 八、Dockerfile语法与实战
+
+#### 8.1什么是dockerfile?
+
+```properties
+Dockerfile用于构建一个新的docker镜像的脚本文件，是由一系列命令和参数构成的脚本。
+#构建新的镜像步骤
+	1）编写Dokerfile 文件
+	2）通过docker build 命令生成新的镜像文件
+	3）通过docker run创建容器
+```
+
+#### 8.2Dockerfile语法规则
+
+```properties
+1.每条指令的保留字必须大写，且后面必须要有一个参数
+2.执行顺序从上往下执行
+3.#用于注释
+4.每条指令都会创建一个新的镜像层，并对镜像进行提交
+```
+
+#### 8.3Dockerfile常用指令
+
+![1581870708310](assets/1581870708310.png)
+
+#### 8.4Dockerfile 构建镜像实战
+
+需求：构建一个jdk镜像
+
+步骤：1.在宿主机创建目录并切换到新目录中
+
+```properties
+# mkdir -p /usr/local/mydocker
+# cd /usr/local/mydocker
+```
+
+2.下载  jdk-8u111-linux-x64.tar.gz 并上传到服务器（虚拟机）中的 /usr/local/mydocker 目录
+
+![1581871001968](assets/1581871001968.png)
+
+3.创建文件Dockerfile,内容如下
+
+```properties
+#来自基础镜像
+FROM centos:7
+#指定镜像创建者信息
+MAINTAINER fangyan
+#切换工作目录 /usr/local
+WORKDIR /usr/local
+#创建一个存放jdk的路径
+RUN mkdir /usr/local/java
+#将jdk压缩包复制并解压到容器中/usr/local/java
+ADD jdk-8u171-linux-x64.tar.gz /usr/local/java
+#配置java环境变量
+ENV JAVA_HOME /usr/local/java/jdk1.8.0_171
+ENV JRE_HOME $JAVA_HOME/jre
+ENV CLASSPATH $JAVA_HOME/lib/dt.jar:$JAVA_HOME/lib/tools.jar:$JRE_HOME/lib:$CLASSPATH
+ENV PATH $JAVA_HOME/bin:$PATH
+CMD ["/bin/bash"]
+```
+
+4.构建镜像语法
+
+```properties
+# docker build [-f 指定Dockerfile所在路径与文件名] -t 生成的镜像名:标签名 .
+注意后边的 空格 和点  . 不要省略,  . 表示当前目录
+-f 指定Dockerfile文件所在路径与文件名。如果未指定  -f 值，则找当前目录下名为  Dockerfile 的构建文件
+
+示例：生成镜像名为jdk 标签为1.8的镜像
+# docker build -t jdk:1.8 .
+```
+
+![1581871239818](assets/1581871239818.png)
+
+5.查看镜像是否构建完成
+
+```properties
+# docker images
+```
+
+![1581871288409](assets/1581871288409.png)
+
+6.创建并运行容器
+
+```properties
+# docker run -it --name=myjdk8 jdk:1.8 /bin/bash
+```
+
+![1581871324937](assets/1581871324937.png)
+
+大功告成，工作目录是/usr/local

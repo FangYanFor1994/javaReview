@@ -16,7 +16,7 @@
 GreetingService greetingService = new GreetingService(){
             @Override
             public void sayMessage(String message) {
-                System.out.println(message);
+                System.out.println("Hello " + message);
             }
         };
 
@@ -65,5 +65,118 @@ public static void main(String args[]){
             }
         }
     }
+```
+
+### 2.lambda表达式
+
+#### 2.1语法及特性
+
+```java
+1.语法
+(parameters) -> expression
+或
+(parameters) -> {statements};
+
+2.lambda表达式重要特性
+	1）可选类型声明：不需要声明参数类型，编译期可统一识别参数值；
+	2）可选参数圆括号：一个参数无需定义圆括号，但多个参数需要定义圆括号；
+	3）可选大括号：如果主题包含一个语句，就不需要使用大括号；
+	4）可选返回关键字：如果主题只有一个表达式返回值则编译器会自动返回值，大括号需要指明表达式返回了一个数值。
+```
+
+#### 2.2lambda表达式实例
+
+Lambda表达式的简单例子：
+
+```java
+// 1. 不需要参数,返回值为 5  
+() -> 5  
+  
+// 2. 接收一个参数(数字类型),返回其2倍的值  
+x -> 2 * x  
+  
+// 3. 接受2个参数(数字),并返回他们的差值  
+(x, y) -> x – y  
+  
+// 4. 接收2个int型整数,返回他们的和  
+(int x, int y) -> x + y  
+  
+// 5. 接受一个 string 对象,并在控制台打印,不返回任何值(看起来像是返回void)  
+(String s) -> System.out.print(s)
+```
+
+lambda表达式实例
+
+```java
+public static void main(String[] args) {
+        ProductController productController = new ProductController();
+        //类型声明
+        productController.test(10,5, (int n, int m) -> n*m);
+        //不用声明类型
+        productController.test(10,5,(n, m) -> n-m);
+        //大括号里返回语句
+        productController.test(10, 5, (n, m) -> {return n/m;});
+        //参数不带括号（一个参数可以不带）
+        GreetingService greet = message -> System.out.println("hello" + message);
+        greet.sayMessage("fangyan");
+        //参数带括号（多个参数必须带）
+        GreetingService greet1 = (message) -> System.out.println("hello" + message);
+        greet.sayMessage("zyy");
+    }
+
+    interface MathOperation {
+        int operation(int a, int b);
+    }
+    interface GreetingService {
+        void sayMessage(String message);
+    }
+    public void test(int i, int j, MathOperation mathOperation){
+        System.out.println(mathOperation.operation(i,j));
+    }
+
+//总结：lambda表达式(parameters) -> {statement};表示一个函数式接口实现；其中，parameters是函数式接口的唯一抽象方法的参数，statement是唯一抽象方法的重写。
+```
+
+#### 2.3变量作用域
+
+```java
+//lambda表达式只能引用标记了final的外层局部变量，这就是说不能在lambda表达式内部修改在域外的局部变量，否则会编译错误。
+
+public class Java8Tester {
+   final static String salutation = "Hello! ";
+   public static void main(String args[]){
+      GreetingService greetService1 = message -> System.out.println(salutation + message);
+      greetService1.sayMessage("Runoob");
+   }
+    
+   interface GreetingService {
+      void sayMessage(String message);
+   }
+}
+
+//我们也可以直接在lambda表达式中访问外层的局部变量
+public class Java8Tester {
+    public static void main(String args[]) {
+        final int num = 1;
+        Converter<Integer, String> s = (param) -> System.out.println(String.valueOf(param + num));
+        s.convert(2);  // 输出结果为 3
+    }
+ 
+    public interface Converter<T1, T2> {
+        void convert(int i);
+    }
+}
+
+//lambda表达式的局部变量可以不用声明为final，但必须不可被后面的代码修改（即隐性具有final的语义）
+int num = 1;  
+Converter<Integer, String> s = (param) -> System.out.println(String.valueOf(param + num));
+s.convert(2);
+num = 5;  
+//报错信息：Local variable num defined in an enclosing scope must be final or effectively 
+ final
+     
+//在lambda表达式中不允许声明一个与局部变量同名的参数或者局部变量
+String first = "";  
+Comparator<String> comparator = (first, second) -> Integer.compare(first.length(), second.length());  //编译会出错
 ```
 
