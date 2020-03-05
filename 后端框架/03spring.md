@@ -256,7 +256,7 @@ ApplicationContext context = new FileSystemXmlApplicationContext("D:/qfworkspace
 3.class属性：
 	配置该bean的完全限定名，spring容器能通过反射机制来创建对象。
 4.scope属性（spring bean的作用域）：
-	singleton：spring容器将以单例的方式创建该对象；
+	singleton：spring容器将以单例的方式创建该对象；（默认）
 	prototype：原型模式，spring容器总是创建新的对象；
 	request：和请求线程绑定HttpServletRequest,一次请求对一个对象的创建。
 	session：和HTTPSession绑定一起，每一个session创建，则对应一个对象被创建。
