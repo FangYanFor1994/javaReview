@@ -1429,6 +1429,12 @@ public String doUpload(MultipartFile img){
 		
 		return "index";
 	}
+
+//注意：上传路径中：
+如果是windows系统 new File("a/b/c").getAbsolutePath()获得是相对路径 
+	new File("/a/b/c").getAbsolutePath()获得的是绝对路径
+如果是Linux系统new File("a/b/c").getAbsolutePath()获得是相对路径。
+ 	new File("/a/b/c").getAbsolutePath() 获得的是绝对路径
 ```
 
 ```jsp
@@ -1508,31 +1514,41 @@ public class User {
 #### 2.代码
 
 ```java
-  //控制器
-	/*
-	 * 文件下载需使用ResponseEntity作为方法返回值
-	 */
-	@RequestMapping("/download.do")
-	public ResponseEntity<byte[]> doDownload() throws IOException{
-		
-		//一般从数据库表中读取相应文件位置，这里暂定为下载d:/1.jpg相应文件
-		String location = "d:/1.jpg";
-		//1.设置响应头信息:filename属性用来设置下载后的文件名称
-		HttpHeaders headers = new HttpHeaders();
-		headers.add("Content-Disposition", "attachement;filename=1.jpg");
-		//2.设置响应状态码200
-		HttpStatus statusCode = HttpStatus.OK;
-		//3.创建输入流，读取相应文件
-		FileInputStream is = new FileInputStream(location);
-		byte[] bs = new byte[is.available()];
-		//读入字节数组
-		is.read(bs);
-		//4.关闭流
-		is.close();
-		
-		ResponseEntity<byte[]> entity = new ResponseEntity<>(bs,headers,statusCode);
-		return entity;
-	}
+   @ResponseBody
+    @RequestMapping("download")
+    public void download(String id, HttpServletResponse response){
+        //从数据库表中读取相应文件位置
+        String location = clueTransferFeedbackMapper.findbyFrist("id", id, ClueTransferFeedbackFormMap.class).getStr("filePath");
+        File file = new File(location);
+        //获取文件名
+        String[] split = location.split("/");
+        String filename = split[split.length - 1];
+        if(file.exists()){
+            response.setContentType("application/force-download");
+            //文件名乱码要手动编码
+            response.addHeader("Content-Disposition", "attachement;filename=" +
+                    new String((filename).getBytes("utf-8"), "ISO-8859-1"));
+            //创建输入流，读取相应文件
+            byte[] b = new byte[1024];
+            FileInputStream is = null;
+            BufferedInputStream bis = null;
+            try {
+                is = new FileInputStream(file);
+                bis = new BufferedInputStream(is);
+                ServletOutputStream os = response.getOutputStream();
+                int i = bis.read(b);
+                while(i != -1){
+                    os.write(b, 0, i);
+                    i = bis.read(b);
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }finally {
+                bis.close();
+                is.close();
+            }
+        }
+    }
 ```
 
 ```jsp
