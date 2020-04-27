@@ -353,3 +353,115 @@ server{
 
 注意：此时访问test.com，如果后面路径是/center、/portal、/demo，那么就跳到代理的链接，其他的全部都跳到http://127.0.0.1:8081/服务。 
 
+### 7.nginx配置高可用集群
+
+1.什么是nginx高可用？
+
+![1587998108464](assets/1587998108464.png)
+
+2.配置高可用的准备工作
+
+```properties
+1.需要两台服务器：192.168.17.129和192.168.17.131
+2.在两台服务器安装nginx
+3.在两台服务器安装keepalived
+	1)使用yum命令进行安装
+	# yum install keepalived -y
+	2)安装之后，在etc里面生成目录keepalived,有文件keepalived.conf
+4.完成高可用配置（主从配置）
+	1）修改/etc/keepalived/keepalived.conf配置文件（见下）
+	2）在/usr/local/src添加检测脚本（见下）
+	3）把两台服务器上的nginx和keepalived启动
+		启动nginx： ./nginx
+		启动keepalived: systemctl start keepalived.service
+5.最终测试
+	1）在浏览器地址栏输入 虚拟ip地址192.168.17.50  能正常访问nginx
+	2）把主服务器（192.168.17.129）nginx和keepalived停止，再输入192.168.17.50 依然可以正常访问nginx，证明已经切换至备机nginx中。
+```
+
+**keepalived.conf**
+
+```properties
+global_defs {
+    notification_email {
+    acassen@firewall.loc
+    failover@firewall.loc
+    sysadmin@firewall.loc
+    }
+    notification_email_from Alexandre.Cassen@firewall.loc
+    smtp_server 192.168.17.129
+    smtp_connect_timeout 30
+    #访问到主机配置，其中LVS_DEVEL是在/etc/hosts文件中配置的127.0.0.1对应的名字
+    router_id LVS_DEVEL 
+}
+
+#检测脚本配置（检测nginx是否还活着，如果死了切换至备用机）
+vrrp_script chk_http_port {
+	#检测脚本位置
+    script "/usr/local/src/nginx_check.sh"
+    ##（检测脚本执行的间隔）
+    interval 2 
+    #权重（如果该nginx死了，权重就减20,）
+    weight -20
+}
+
+vrrp_instance VI_1 {
+	# 备份服务器上将 MASTER 改为 BACKUP
+    state MASTER 
+    #网卡，可通过ifconfig命令进行查看
+    interface ens33 
+    # 主、备机的 virtual_router_id 必须相同
+    virtual_router_id 51 
+    # 主、备机取不同的优先级，主机值较大，备份机值较小
+    priority 90 
+    #每隔一秒发送一次心跳检测，确认主机/备机是否还活着
+    advert_int 1
+    authentication {
+        auth_type PASS
+        auth_pass 1111
+    }
+    virtual_ipaddress {
+        #VRRP H 虚拟地址，可以配置多个，访问nginx集群就可以通过这个虚拟ip访问
+    	192.168.17.50 
+    }
+}
+```
+
+**检测脚本nginx_check.sh**
+
+```properties
+#!/bin/bash
+A=`ps -C nginx –no-header |wc -l`
+if [ $A -eq 0 ];then
+/usr/local/nginx/sbin/nginx
+sleep 2
+if [ `ps -C nginx --no-header |wc -l` -eq 0 ];then
+killall keepalived
+fi
+fi
+```
+
+### 8.nginx的原理解析
+
+1.master和worker
+
+![1588001066227](assets/1588001066227.png)
+
+2.worker如何进行工作的（争抢）
+
+![1588001102144](assets/1588001102144.png)
+
+```properties
+3.一个master和多个worker的好处
+	1）可以使用nginx -s reload 热部署，利用nginx进行热部署操作；
+	2）每个worker是独立的进程，如果有其中的一个worker出问题，其他worker独立的，继续进行争抢，实现请求过程，不会造成服务终端。
+4.设置多少个worker合适？
+	worker数量和服务器的CPU数量相等是最为适宜的。
+5.连接数worker_connection
+	第一个问题：发送请求占用了worker的几个连接数？
+	答：2或4个；
+	第二个问题：nginx有一个master，有四个worker，每个worker支持的最大连接数是1024，支持的最大并发数是多少？
+	答：普通的静态访问最大并发数是：worker_connections*worker_processes/2,
+		如果是http作反向代理来说最大并发数应该是worker_connctions*worker_processes/4.
+```
+
