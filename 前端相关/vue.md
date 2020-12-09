@@ -1603,3 +1603,278 @@ routes: [
 5) this.$router.go(1): 请求下一个记录路由
 ```
 
+### 六、vuex
+
+#### 6.1vuex理解
+
+```js
+1.vuex是什么？
+	1) github 站点: https://github.com/vuejs/vuex
+    2) 在线文档: https://vuex.vuejs.org/zh-cn/
+    3) 简单来说: 对 vue 应用中多个组件的共享状态进行集中式的管理(读/写)
+2.状态自管理应用：
+	1）store:驱动应用的数据源；
+    2）view：以声明方式将state映射到视图；
+    3）actions：响应在view上的用户输入导致的状态变化（包含n个更新状态的方法）
+```
+
+![1603638822975](assets/1603638822975.png)
+
+#### 6.2vuex的核心概念和API
+
+```JS
+1.state
+	1)vuex管理的状态对象；
+    2）他应该是唯一的：
+    	const state = {
+        	xxx: initValue
+        }
+2.mutations
+	1)包含多个直接更新state的方法（回调函数）的对象；
+    2)谁来触发：actions中的commit('mutation名称')
+	3）只能包含同步代码块，不能写异步代码。  异步代码写进action中
+    	const mutations = {
+            yyy (state, {data1}) {
+            	// 更新 state 的某个属性
+            }
+        }
+3.actions
+	1）包含多个事件回调函数的对象；
+    2）通过执行：commit()来触发mutation的调用，间接更新state
+    3）谁来触发：组件中：$store.dispatch('action名称',data1)   //'zzz'
+	4)可以包含异步代码：（定时器，ajax）
+    	const actions = {
+            zzz ({commit, state}, data1) {
+            	commit('yyy', {data1})
+            }
+        }
+4.getters
+	1)包含多个计算属性(get)的对象；
+    2）谁来读取：组件中：$store.getters.xxx
+		const getters = {
+            mmm (state) {
+                return ...
+            }
+        }
+5.modules
+	1)包含多个module
+    2）一个module是一个store的配置对象；
+    3）与一个组件（包含有共享数据）对应
+6.向外暴露store对象
+        export default new Vuex.Store({
+            state,
+            mutations,
+            actions,
+            getters
+        })
+7.组件中
+    import {mapState, mapGetters, mapActions} from 'vuex'
+    export default {
+        computed: {
+            ...mapState(['xxx']),
+            ...mapGetters(['mmm'])
+        }
+    	methods: mapActions(['zzz'])
+    }
+    {{xxx}} {{mmm}} @click="zzz(data)"
+8.映射store
+	import store from './store'
+    new Vue({
+    store
+    })
+9.store对象
+	1）所有用vuex管理的组件中都多一个属性$store, 它就是一个store对象
+	2）属性：
+    	state：注册的state对象
+        getters:注册的getter对象
+    3）方法：
+    	dispatch(actionName, data)    //分发调用action
+```
+
+#### 6.3案例一、计数器
+
+**store.js**
+
+```js
+/*
+vuex的核心管理模块 store
+ */
+//引入Vue和Vuex模块
+import Vue from 'vue'
+import Vuex from 'vuex'
+//声明使用vuex
+Vue.use(Vuex)
+
+/*
+  state状态对象
+ */
+const state = {
+  count: 0
+}
+
+/*mutation对象
+  包含多个更新state函数的对象
+  一个方法就是一个mutation
+  mutation只能包含更新state的同步代码，也不会有逻辑
+  mutation有action触发调用：commit('mutationName')
+*/
+const mutations = {
+  ADD() {
+    state.count++
+  },
+  DECRE() {
+    state.count--
+  }
+}
+
+/*actions对象
+  包含多个对应事件回调函数的对象 间接更新state
+  一个方法就是一个action
+  action中可以有逻辑和异步代码
+  action由组件来触发调用：this.$store.dispatch('actionName')
+
+*/
+const actions = {
+  add({commit}) {
+    commit('ADD')
+  },
+  decre({commit}) {
+    commit('DECRE')
+  },
+  increIfOdd({commit, state}) {
+    if (state.count % 2 === 1) {
+      commit('ADD')
+    }
+  },
+  increAsync({commit}) {
+    setTimeout(() => {
+      commit('ADD')
+    }, 1000)
+  }
+}
+
+/*getters对象
+  包含多个getter计算属性函数的对象
+ */
+const getters = {
+    evenOrOdd(state) {
+    return state.count % 2 === 0 ? '偶数' : '奇数'
+  },
+  count(state) {
+    return state.count
+  }
+}
+
+/**
+ * 向外暴露store实例对象
+ */
+export default new Vuex.Store({
+  state,
+  mutations,
+  actions,
+  getters
+})
+```
+
+**main.js**
+
+```js
+import Vue from 'vue'
+import App from './App.vue'
+import store from './store'
+
+new Vue({
+  el:'#app',
+  components: {App},
+  template: '<App/>',
+  store  //使所有组件都多了一个$store对象,  注意：此处store必须小写
+})
+```
+
+**App.vue(优化前)**
+
+```vue
+<template>
+  <div>
+    <p>click {{count}} times, count is {{oddOrEven}}</p>
+    <button @click="add">+</button>
+    <button @click="decre">-</button>
+    <button @click="increIfOdd">increment if odd</button>
+    <button @click="increAsync">increment async</button>
+  </div>
+</template>
+
+<script>
+  export default {
+    name: 'App',
+    computed: {
+      oddOrEven() {
+        return this.$store.getters.evenOrOdd
+      },
+      count() {
+        return this.$store.getters.count
+      }
+    },
+    methods: {
+      add() {
+        this.$store.dispatch('add')
+      },
+      decre() {
+        this.$store.dispatch('decre')
+      },
+      increIfOdd() {
+        this.$store.dispatch('increIfOdd')
+      },
+      increAsync() {
+        this.$store.dispatch('increAsync')
+      }
+    }
+  }
+</script>
+
+<style scoped>
+</style>
+
+```
+
+**App.vue（优化后）**
+
+```vue
+<template>
+  <div>
+    <p>click {{count}} times, count is {{oddOrEven}}</p>
+    <button @click="add">+</button>
+    <button @click="decre">-</button>
+    <button @click="increIfOdd">increment if odd</button>
+    <button @click="increAsync">increment async</button>
+  </div>
+</template>
+
+<script>
+  import {mapGetters, mapActions} from 'vuex'
+
+  export default {
+    name: 'App',
+    computed: mapGetters({ //store中和组件中名称不一致的用对象来手动映射
+      count: 'count',
+      evenOrOdd: 'oddOrEven' //evenOrOdd是组件中的名称，'oddOrEven'是store中的名称
+    }),
+    methods: mapActions([ //store中和组件中名称一致的直接用数组直接映射
+      'add',
+      'decre',
+      'increIfOdd',
+      'increAsync'
+    ])
+  }
+</script>
+
+<style scoped>
+
+</style>
+
+```
+
+#### 6.4vuex结构图
+
+![1603641872458](assets/1603641872458.png)
+
