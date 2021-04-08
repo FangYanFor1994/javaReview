@@ -12,7 +12,7 @@
 //servlet  （“/servlet1”）
 protected void doGet(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
 		User user = new User();
-		user.setUserName("赵雅静");
+		user.setUserName("方岩");
 		user.setAge(25);
 		request.setAttribute("user",user);
 		request.getRequestDispatcher("/1.jsp").forward(request, response);

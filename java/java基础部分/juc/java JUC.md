@@ -33,11 +33,9 @@
 
 #### 2.2volatile关键字
 
-```java
-	java提供了一种稍弱的同步机制，即volatile变量，用来确保将变量的更新操作通知到其他线程。可以将volatile看作一个轻量级的锁。但是又与锁有些不同：
-	1）对于多线程不是一种互斥关系，而sychronize锁对于线程是互斥关系；
-	2）不能保证变量状态的“原子性”操作；
-```
+java提供了一种稍弱的同步机制，即==volatile==变量，用来==确保将变量的更新操作通知到其他线程==。可以将volatile看作一个轻量级的锁。但是又与锁有些不同：
+	1. ==对于多线程不是一种互斥关系，而sychronize锁对于线程是互斥关系；==
+	2. ==不能保证变量状态的“原子性”操作；==
 
 ```java
 /*
@@ -106,7 +104,7 @@ class ThreadDemo implements Runnable {
 1. CAS (Compare-And-Swap) 是一种硬件对并发的支持，针对多处理器操作而设计的处理器中的一种特殊指令，用于管理对共享数据的并发访问；
 2.CAS 是一种无锁的非阻塞算法的实现。
 3.CAS包含了3个操作数：
-	1）需要读写的内存值；
+	1）需要读写的内存值V；
 	2）进行比较的值A；//设置新值时读取的内存值，看是否被更改了
 	3）拟写入的新值B；
 4.当且仅当V值等于A值时，CAS通过原子方式用新值B来更新V的值，否则不会执行任何操作。
@@ -237,7 +235,7 @@ class AtomicDemo implements Runnable{
 
 ```java 
 1.java5.0在java.util.concurrent包中提供了多种并发容器类来改进同步容器的性能；
-2.ConcurrentHashMap同步容器类是java5增加的一个线程安全的哈希表。对于多线程的操作，介于HashMap和HashTable之间。内部采用锁分段机制替代HashTable的独占锁。进而提高性能；
+2.ConcurrentHashMap同步容器类是java5增加的一个线程安全的哈希表。对于多线程的操作，介于HashMap和HashTable之间。内部采用/*锁分段机制*/替代HashTable的独占锁。进而提高性能；
 3.此包还提供了设计用于多线程上下文中的Collection实现：
 	ConcurrentHashMap/ConcurrentSkipListMap/ConcurrentSkipListSet/CopyOnWriteArrayList和CopyOnWriteArraySet.
     *当期望许多线程访问一个给定Collection时，ConcurrentHashMap通常优于同步的HashMap, ConcurrentSkipListMap通常优于同步的TreeMap;
@@ -966,6 +964,70 @@ class ThreadPoolDemo implements Runnable{
 	}
 }
 ```
+
+#### 12.1线程池使用注意事项
+
+![1608999906822](assets/1608999906822.png)
+
+> 创建线程池的正确姿势：==ThreadPoolExecutor==
+
+```java
+public class ThreadPoolDemo {
+    public static void main(String[] args) {
+        ThreadPoolExecutor pool = new ThreadPoolExecutor(10, 10, 60L, TimeUnit.SECONDS, new ArrayBlockingQueue<>(10));
+        ThreadPoolDem td = new ThreadPoolDem();
+        for (int i = 0; i < 21; i++) { // 注意，此时为21，就会报RejectedExecutionException（拒绝执行异常），因为这超过了我们给线程池设定的大小corePoolSize + workQueue容量，并且超过了maximumPoolSize
+            pool.submit(td);
+        }
+
+        pool.shutdown();
+    }
+}
+
+
+class ThreadPoolDem implements Runnable {
+    private int num = 0;
+    @Override
+    public void run() {
+        while(num < 100) {
+            try {
+                Thread.sleep(20);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+            System.out.println(Thread.currentThread().getName() + ": " + num++);
+        }
+    }
+}
+```
+
+> 线程池参数说明
+
+```java
+/**
+     * @param corePoolSize 保留在池中的线程数，即使处于空闲状态，除非设置了{@code allowCoreThreadTimeOut}
+     * @param maximumPoolSize 池中允许的最大线程数
+     * @param keepAliveTime 当线程数大于核心线程数时，这是多余的空闲线程在终止之前等待新任务的最长时间
+     * @param unit keepAliveTime参数的时间单位
+     * @param workQueue 在执行任务之前用于保留任务的队列。此队列将仅保存由{@code execute}方法提交的{@code Runnable} 任务。
+     * @param threadFactory 执行程序创建新线程时要使用的工厂
+     * @param handler 当执行被阻塞时要使用的处理程序因为达到了线程界限和队列容量
+     */
+public ThreadPoolExecutor(int corePoolSize,
+                              int maximumPoolSize,
+                              long keepAliveTime,
+                              TimeUnit unit,
+                              BlockingQueue<Runnable> workQueue,
+                              ThreadFactory threadFactory,
+                              RejectedExecutionHandler handler) {}
+
+```
+
+> 新提交一个任务的处理流程
+
+![1609002428472](assets/1609002428472.png)
+
+
 
 ### 13.ScheduledExecutorService
 
